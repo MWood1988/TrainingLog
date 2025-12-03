@@ -7,7 +7,7 @@
 import SwiftUI
 
 @main
-struct TrainingLogV2App: App {
+struct HIT2GrowApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()

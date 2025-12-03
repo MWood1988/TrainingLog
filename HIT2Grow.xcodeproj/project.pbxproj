@@ -7,13 +7,13 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		2E3FB9E62EDFB6B600002E8E /* TrainingLogV2.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TrainingLogV2.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2E3FB9E62EDFB6B600002E8E /* HIT2Grow.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HIT2Grow.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		2E3FB9E82EDFB6B600002E8E /* TrainingLogV2 */ = {
+		2E3FB9E82EDFB6B600002E8E /* HIT2Grow */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = TrainingLogV2;
+			path = HIT2Grow;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -32,7 +32,7 @@
 		2E3FB9DD2EDFB6B600002E8E = {
 			isa = PBXGroup;
 			children = (
-				2E3FB9E82EDFB6B600002E8E /* TrainingLogV2 */,
+				2E3FB9E82EDFB6B600002E8E /* HIT2Grow */,
 				2E3FB9E72EDFB6B600002E8E /* Products */,
 			);
 			sourceTree = "<group>";
@@ -40,7 +40,7 @@
 		2E3FB9E72EDFB6B600002E8E /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				2E3FB9E62EDFB6B600002E8E /* TrainingLogV2.app */,
+				2E3FB9E62EDFB6B600002E8E /* HIT2Grow.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -48,9 +48,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		2E3FB9E52EDFB6B600002E8E /* TrainingLogV2 */ = {
+		2E3FB9E52EDFB6B600002E8E /* HIT2Grow */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 2E3FB9F12EDFB6B700002E8E /* Build configuration list for PBXNativeTarget "TrainingLogV2" */;
+			buildConfigurationList = 2E3FB9F12EDFB6B700002E8E /* Build configuration list for PBXNativeTarget "HIT2Grow" */;
 			buildPhases = (
 				2E3FB9E22EDFB6B600002E8E /* Sources */,
 				2E3FB9E32EDFB6B600002E8E /* Frameworks */,
@@ -61,13 +61,13 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				2E3FB9E82EDFB6B600002E8E /* TrainingLogV2 */,
+				2E3FB9E82EDFB6B600002E8E /* HIT2Grow */,
 			);
-			name = TrainingLogV2;
+			name = HIT2Grow;
 			packageProductDependencies = (
 			);
 			productName = TrainingLogV2;
-			productReference = 2E3FB9E62EDFB6B600002E8E /* TrainingLogV2.app */;
+			productReference = 2E3FB9E62EDFB6B600002E8E /* HIT2Grow.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -85,7 +85,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 2E3FB9E12EDFB6B600002E8E /* Build configuration list for PBXProject "TrainingLogV2" */;
+			buildConfigurationList = 2E3FB9E12EDFB6B600002E8E /* Build configuration list for PBXProject "HIT2Grow" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -99,7 +99,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				2E3FB9E52EDFB6B600002E8E /* TrainingLogV2 */,
+				2E3FB9E52EDFB6B600002E8E /* HIT2Grow */,
 			);
 		};
 /* End PBXProject section */
@@ -251,6 +251,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = GNV9ZAG7AG;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -282,6 +283,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = GNV9ZAG7AG;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -309,7 +311,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		2E3FB9E12EDFB6B600002E8E /* Build configuration list for PBXProject "TrainingLogV2" */ = {
+		2E3FB9E12EDFB6B600002E8E /* Build configuration list for PBXProject "HIT2Grow" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				2E3FB9EF2EDFB6B700002E8E /* Debug */,
@@ -318,7 +320,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		2E3FB9F12EDFB6B700002E8E /* Build configuration list for PBXNativeTarget "TrainingLogV2" */ = {
+		2E3FB9F12EDFB6B700002E8E /* Build configuration list for PBXNativeTarget "HIT2Grow" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				2E3FB9F22EDFB6B700002E8E /* Debug */,
