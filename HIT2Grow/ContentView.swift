@@ -1,10 +1,3 @@
-//
-// TEST COMMIT
-//  ContentView.swift
-//  TrainingLogV2
-//
-//  Created by Michael Woodvine on 03.12.25.
-//
 import SwiftUI
 
 struct ContentView: View {
