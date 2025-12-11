@@ -200,16 +200,34 @@ struct SessionHistoryRow: View {
     var body: some View {
         NavigationLink(destination: destinationView) {
             VStack(alignment: .leading, spacing: 0) {
-                // Date and Time Header
+                // Date and Time Header with Intensity
                 HStack {
-                    Image(systemName: "calendar")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text(formattedDateTime)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.secondary)
+                    HStack(spacing: 4) {
+                        Image(systemName: "calendar")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(formattedDateTime)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.secondary)
+                    }
+                    
                     Spacer()
+                    
+                    // Add intensity badge
+                    HStack(spacing: 4) {
+                        Image(systemName: exercise.intensity.icon)
+                            .font(.caption)
+                        Text(exercise.intensity.rawValue)
+                            .font(.caption)
+                            .fontWeight(.medium)
+                    }
+                    .foregroundColor(exercise.intensity.color)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(exercise.intensity.color.opacity(0.15))
+                    .cornerRadius(6)
+                    
                     Image(systemName: "chevron.right")
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -274,7 +292,6 @@ struct SetDetailRow: View {
         .foregroundColor(.primary)
     }
 }
-
 // Extension for selective corner radius
 extension View {
     func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
