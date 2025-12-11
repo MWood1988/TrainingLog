@@ -30,7 +30,7 @@ struct ContentView: View {
                     .padding()
             }
             .sheet(isPresented: $showingNewTemplate) {
-                NewWorkoutTemplateView { template in
+                NewWorkoutTemplateView(store: store) { template in
                     store.addTemplate(template)
                     showingNewTemplate = false
                 }

@@ -5,23 +5,33 @@ struct WorkoutHistoryView: View {
     let template: WorkoutTemplate
     @ObservedObject var store: WorkoutStore
     
-    private var exercisesGrouped: [String: [(WorkoutSession, Exercise)]] {
-        var dict: [String: [(WorkoutSession, Exercise)]] = [:]
-        for session in store.sessions(for: template) {
-            for exercise in session.exercises {
-                dict[exercise.name, default: []].append((session, exercise))
-            }
+    private var exerciseSections: [(exerciseName: String, exerciseId: UUID, records: [(WorkoutSession, Exercise)])] {
+        // Build sections for each exercise in the template
+        return template.exercises.map { exerciseTemplate in
+            // Get all sessions from THIS template that include this exercise
+            let records = store.sessions(for: template)
+                .flatMap { session -> [(WorkoutSession, Exercise)] in
+                    session.exercises
+                        .filter { $0.exerciseId == exerciseTemplate.exerciseId }
+                        .map { (session, $0) }
+                }
+            
+            return (
+                exerciseName: exerciseTemplate.name,
+                exerciseId: exerciseTemplate.exerciseId,
+                records: records
+            )
         }
-        return dict
     }
     
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                ForEach(exercisesGrouped.keys.sorted(), id: \.self) { exerciseName in
+                ForEach(exerciseSections, id: \.exerciseId) { section in
                     ExerciseHistorySection(
-                        exerciseName: exerciseName,
-                        records: exercisesGrouped[exerciseName] ?? [],
+                        exerciseName: section.exerciseName,
+                        exerciseId: section.exerciseId,
+                        records: section.records,
                         template: template,
                         store: store
                     )
@@ -36,14 +46,20 @@ struct WorkoutHistoryView: View {
 
 struct ExerciseHistorySection: View {
     let exerciseName: String
+    let exerciseId: UUID
     let records: [(WorkoutSession, Exercise)]
     let template: WorkoutTemplate
     @ObservedObject var store: WorkoutStore
     
     @State private var showAllRecords = false
     
+    // Get all sessions for this exercise across ALL templates
+    private var allRecords: [(WorkoutSession, Exercise)] {
+        store.sessions(for: exerciseId)
+    }
+    
     private var sortedRecords: [(WorkoutSession, Exercise)] {
-        records.sorted { $0.0.date > $1.0.date }
+        allRecords.sorted { $0.0.date > $1.0.date }
     }
     
     private var displayedRecords: [(WorkoutSession, Exercise)] {
@@ -65,49 +81,80 @@ struct ExerciseHistorySection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Exercise Header
-            Text(exerciseName)
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundColor(.primary)
-            
-            // Progress Chart
-            ExerciseProgressChart(data: chartData)
-                .padding(.bottom, 8)
-            
-            // Session Records
-            VStack(spacing: 12) {
-                ForEach(displayedRecords, id: \.0.id) { session, exercise in
-                    SessionHistoryRow(
-                        session: session,
-                        exercise: exercise,
-                        template: template,
-                        store: store
-                    )
-                }
+            HStack {
+                Text(exerciseName)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
+                
+                Spacer()
             }
             
-            // Show More/Less Button
-            if sortedRecords.count > 3 {
-                Button(action: {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        showAllRecords.toggle()
-                    }
-                }) {
-                    HStack {
-                        Spacer()
-                        Text(showAllRecords ? "Show Less" : "Show More (\(sortedRecords.count - 3) older)")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        Image(systemName: showAllRecords ? "chevron.up" : "chevron.down")
-                            .font(.subheadline)
-                        Spacer()
-                    }
-                    .padding(.vertical, 10)
-                    .background(Color.blue.opacity(0.1))
-                    .foregroundColor(.blue)
-                    .cornerRadius(8)
+            // Total sessions info
+            Text("\(allRecords.count) total session\(allRecords.count == 1 ? "" : "s") across all workouts")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            
+            // Show content or empty state
+            if sortedRecords.isEmpty {
+                // Empty state
+                VStack(spacing: 12) {
+                    Image(systemName: "chart.xyaxis.line")
+                        .font(.system(size: 48))
+                        .foregroundColor(.secondary)
+                    Text("No sessions recorded yet")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    Text("Start a workout to see your progress here")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
                 }
-                .padding(.top, 4)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
+                .background(Color(.systemGray6))
+                .cornerRadius(12)
+            } else {
+                // Progress Chart
+                ExerciseProgressChart(data: chartData)
+                    .padding(.bottom, 8)
+                
+                // Session Records
+                VStack(spacing: 12) {
+                    ForEach(displayedRecords, id: \.0.id) { session, exercise in
+                        SessionHistoryRow(
+                            session: session,
+                            exercise: exercise,
+                            template: template,
+                            store: store,
+                            showTemplateName: true
+                        )
+                    }
+                }
+                
+                // Show More/Less Button
+                if sortedRecords.count > 3 {
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            showAllRecords.toggle()
+                        }
+                    }) {
+                        HStack {
+                            Spacer()
+                            Text(showAllRecords ? "Show Less" : "Show More (\(sortedRecords.count - 3) older)")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            Image(systemName: showAllRecords ? "chevron.up" : "chevron.down")
+                                .font(.subheadline)
+                            Spacer()
+                        }
+                        .padding(.vertical, 10)
+                        .background(Color.blue.opacity(0.1))
+                        .foregroundColor(.blue)
+                        .cornerRadius(8)
+                    }
+                    .padding(.top, 4)
+                }
             }
             
             // Section Divider
@@ -195,11 +242,16 @@ struct SessionHistoryRow: View {
     let exercise: Exercise
     let template: WorkoutTemplate
     @ObservedObject var store: WorkoutStore
+    let showTemplateName: Bool
     
     private var formattedDateTime: String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d, yyyy 'at' h:mm a"
         return formatter.string(from: session.date)
+    }
+    
+    private var sessionTemplateName: String {
+        store.templates.first(where: { $0.id == session.templateId })?.name ?? "Unknown"
     }
     
     var body: some View {
@@ -211,10 +263,18 @@ struct SessionHistoryRow: View {
                         Image(systemName: "calendar")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        Text(formattedDateTime)
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(formattedDateTime)
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.secondary)
+                            
+                            if showTemplateName {
+                                Text(sessionTemplateName)
+                                    .font(.caption2)
+                                    .foregroundColor(.blue)
+                            }
+                        }
                     }
                     
                     Spacer()
@@ -262,7 +322,9 @@ struct SessionHistoryRow: View {
     }
     
     private var destinationView: some View {
-        WorkoutSessionView(template: template, existingSession: session) { updatedSession in
+        // Get the actual template for this session
+        let sessionTemplate = store.templates.first(where: { $0.id == session.templateId }) ?? template
+        return WorkoutSessionView(template: sessionTemplate, existingSession: session) { updatedSession in
             store.updateSession(updatedSession)
         }
     }

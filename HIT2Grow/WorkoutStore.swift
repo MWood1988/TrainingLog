@@ -4,13 +4,39 @@ import Combine
 class WorkoutStore: ObservableObject {
     @Published var templates: [WorkoutTemplate] = []
     @Published var sessions: [WorkoutSession] = []
+    @Published var exerciseLibrary: [ExerciseLibraryItem] = []
     
     private let templatesKey = "templates"
     private let sessionsKey = "sessions"
+    private let exerciseLibraryKey = "exerciseLibrary"
     
     init() {
+        loadExerciseLibrary()
         loadTemplates()
         loadSessions()
+    }
+    
+    // MARK: - Exercise Library
+    
+    func addExercise(_ exercise: ExerciseLibraryItem) {
+        exerciseLibrary.append(exercise)
+        saveExerciseLibrary()
+    }
+    
+    func getOrCreateExercise(name: String) -> ExerciseLibraryItem {
+        // Check if exercise already exists (case-insensitive)
+        if let existing = exerciseLibrary.first(where: { $0.name.lowercased() == name.lowercased() }) {
+            return existing
+        }
+        
+        // Create new exercise
+        let newExercise = ExerciseLibraryItem(name: name)
+        addExercise(newExercise)
+        return newExercise
+    }
+    
+    func exerciseExists(name: String) -> Bool {
+        exerciseLibrary.contains(where: { $0.name.lowercased() == name.lowercased() })
     }
     
     // MARK: - Templates
@@ -31,6 +57,19 @@ class WorkoutStore: ObservableObject {
             .sorted { $0.date > $1.date }
     }
     
+    // Get all sessions for a specific exercise (across all templates)
+    func sessions(for exerciseId: UUID) -> [(WorkoutSession, Exercise)] {
+        var results: [(WorkoutSession, Exercise)] = []
+        
+        for session in sessions {
+            for exercise in session.exercises where exercise.exerciseId == exerciseId {
+                results.append((session, exercise))
+            }
+        }
+        
+        return results.sorted { $0.0.date > $1.0.date }
+    }
+    
     // MARK: - Sessions
     
     func addSession(_ session: WorkoutSession) {
@@ -46,6 +85,19 @@ class WorkoutStore: ObservableObject {
     }
     
     // MARK: - Persistence
+    
+    private func loadExerciseLibrary() {
+        guard let data = UserDefaults.standard.data(forKey: exerciseLibraryKey),
+              let decoded = try? JSONDecoder().decode([ExerciseLibraryItem].self, from: data) else {
+            return
+        }
+        exerciseLibrary = decoded
+    }
+    
+    private func saveExerciseLibrary() {
+        guard let encoded = try? JSONEncoder().encode(exerciseLibrary) else { return }
+        UserDefaults.standard.set(encoded, forKey: exerciseLibraryKey)
+    }
     
     private func loadTemplates() {
         guard let data = UserDefaults.standard.data(forKey: templatesKey),

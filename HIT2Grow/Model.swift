@@ -1,6 +1,17 @@
 import Foundation
 import SwiftUI
 
+// Exercise Library Item - represents a unique exercise across all workouts
+struct ExerciseLibraryItem: Identifiable, Codable, Equatable {
+    let id: UUID
+    var name: String
+    
+    init(id: UUID = UUID(), name: String) {
+        self.id = id
+        self.name = name
+    }
+}
+
 enum ExerciseForm: String, Codable, CaseIterable {
     case meh = "Meh"
     case good = "Good"
@@ -37,10 +48,12 @@ struct WorkoutTemplate: Identifiable, Codable, Equatable {
 
 struct ExerciseTemplate: Identifiable, Codable, Equatable {
     let id: UUID
-    var name: String
+    var exerciseId: UUID  // References ExerciseLibraryItem
+    var name: String      // Cached for display
     
-    init(id: UUID = UUID(), name: String) {
+    init(id: UUID = UUID(), exerciseId: UUID, name: String) {
         self.id = id
+        self.exerciseId = exerciseId
         self.name = name
     }
 }
@@ -61,12 +74,14 @@ struct WorkoutSession: Identifiable, Codable, Equatable {
 
 struct Exercise: Identifiable, Codable, Equatable {
     let id: UUID
-    var name: String
+    var exerciseId: UUID  // References ExerciseLibraryItem
+    var name: String      // Cached for display
     var sets: [ExerciseSet]
     var form: ExerciseForm
     
-    init(id: UUID = UUID(), name: String, sets: [ExerciseSet], form: ExerciseForm = .good) {
+    init(id: UUID = UUID(), exerciseId: UUID, name: String, sets: [ExerciseSet], form: ExerciseForm = .good) {
         self.id = id
+        self.exerciseId = exerciseId
         self.name = name
         self.sets = sets
         self.form = form
