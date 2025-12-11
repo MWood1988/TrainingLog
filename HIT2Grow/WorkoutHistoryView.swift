@@ -143,6 +143,11 @@ struct ExerciseProgressChart: View {
         let lowerBound = max(0, minWeight - padding)
         let upperBound = maxWeight + padding
         
+        // Ensure we have a valid range (upperBound must be > lowerBound)
+        if upperBound <= lowerBound {
+            return 0...100
+        }
+        
         return lowerBound...upperBound
     }
     
@@ -214,18 +219,18 @@ struct SessionHistoryRow: View {
                     
                     Spacer()
                     
-                    // Add intensity badge
+                    // Add form badge
                     HStack(spacing: 4) {
-                        Image(systemName: exercise.intensity.icon)
+                        Image(systemName: exercise.form.icon)
                             .font(.caption)
-                        Text(exercise.intensity.rawValue)
+                        Text(exercise.form.rawValue)
                             .font(.caption)
                             .fontWeight(.medium)
                     }
-                    .foregroundColor(exercise.intensity.color)
+                    .foregroundColor(exercise.form.color)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(exercise.intensity.color.opacity(0.15))
+                    .background(exercise.form.color.opacity(0.15))
                     .cornerRadius(6)
                     
                     Image(systemName: "chevron.right")

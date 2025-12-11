@@ -26,11 +26,14 @@ struct WorkoutSessionView: View {
     
     var body: some View {
         Form {
+            Section {
+                DatePicker("Workout Date", selection: $session.date, displayedComponents: [.date, .hourAndMinute])
+            }
+            
             ForEach($session.exercises) { $exercise in
                 exerciseSection(for: $exercise)
             }
         }
-        .navigationTitle(formattedDate)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 saveButton
@@ -41,7 +44,6 @@ struct WorkoutSessionView: View {
             
             // Add keyboard toolbar here
             ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
                 if let focused = focusedField {
                     switch focused {
                     case .reps(let exerciseId, let setId):
@@ -51,11 +53,13 @@ struct WorkoutSessionView: View {
                             Text("Enter")
                                 .fontWeight(.semibold)
                                 .foregroundColor(.white)
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 8)
+                                .frame(maxWidth: .infinity)  // Full width
+                                .padding(.vertical, 12)
                                 .background(Color.blue)
                                 .cornerRadius(8)
                         }
+                        .buttonStyle(.plain)  // Removes default button styling
+                        
                     case .weight(let exerciseId, let setId):
                         Button(action: {
                             // Find the exercise and set to determine if we should add a new set
@@ -78,11 +82,12 @@ struct WorkoutSessionView: View {
                             Text("Enter")
                                 .fontWeight(.semibold)
                                 .foregroundColor(.white)
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 8)
+                                .frame(maxWidth: .infinity)  // Full width
+                                .padding(.vertical, 12)
                                 .background(Color.blue)
                                 .cornerRadius(8)
                         }
+                        .buttonStyle(.plain)  // Removes default button styling
                     }
                 }
             }
@@ -102,17 +107,17 @@ struct WorkoutSessionView: View {
             
             // Intensity selector
             VStack(alignment: .leading, spacing: 8) {
-                Text("How did this exercise feel?")
+                Text("How was your form?")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                 
                 HStack(spacing: 8) {
-                    ForEach(ExerciseIntensity.allCases, id: \.self) { intensity in
-                        IntensityButton(
-                            intensity: intensity,
-                            isSelected: exercise.wrappedValue.intensity == intensity
+                    ForEach(ExerciseForm.allCases, id: \.self) { form in
+                        FormButton(
+                            form: form,
+                            isSelected: exercise.wrappedValue.form == form
                         ) {
-                            exercise.wrappedValue.intensity = intensity
+                            exercise.wrappedValue.form = form
                         }
                     }
                 }
@@ -165,6 +170,7 @@ struct SetRowEditor: View {
             
             TextField("Weight", text: weightBinding)
                 .keyboardType(.decimalPad)
+                .environment(\.locale, Locale(identifier: "en_US"))
                 .focused($focusedField, equals: .weight(exerciseId: exerciseId, setId: set.id))
         }
     }
@@ -204,29 +210,29 @@ struct SetRowEditor: View {
     }
 }
 
-struct IntensityButton: View {
-    let intensity: ExerciseIntensity
+struct FormButton: View {
+    let form: ExerciseForm
     let isSelected: Bool
     let action: () -> Void
     
     var body: some View {
         Button(action: action) {
             HStack(spacing: 4) {
-                Image(systemName: intensity.icon)
+                Image(systemName: form.icon)
                     .font(.caption)
-                Text(intensity.rawValue)
+                Text(form.rawValue)
                     .font(.caption)
                     .fontWeight(isSelected ? .semibold : .regular)
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(isSelected ? intensity.color.opacity(0.2) : Color.gray.opacity(0.1))
-            .foregroundColor(isSelected ? intensity.color : .secondary)
+            .background(isSelected ? form.color.opacity(0.2) : Color.gray.opacity(0.1))
+            .foregroundColor(isSelected ? form.color : .secondary)
             .cornerRadius(8)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(isSelected ? intensity.color : Color.clear, lineWidth: 1.5)
+                    .stroke(isSelected ? form.color : Color.clear, lineWidth: 1.5)
             )
         }
         .buttonStyle(.plain)

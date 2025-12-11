@@ -1,24 +1,24 @@
 import Foundation
 import SwiftUI
 
-enum ExerciseIntensity: String, Codable, CaseIterable {
+enum ExerciseForm: String, Codable, CaseIterable {
     case meh = "Meh"
     case good = "Good"
-    case intense = "Intense"
+    case perfect = "Perfect"
     
     var icon: String {
         switch self {
         case .meh: return "face.dashed"
         case .good: return "flame"
-        case .intense: return "bolt.fill"
+        case .perfect: return "bolt.fill"
         }
     }
     
     var color: Color {
         switch self {
-        case .meh: return .gray
+        case .meh: return .red
         case .good: return .orange
-        case .intense: return .red
+        case .perfect: return .green
         }
     }
 }
@@ -63,13 +63,13 @@ struct Exercise: Identifiable, Codable, Equatable {
     let id: UUID
     var name: String
     var sets: [ExerciseSet]
-    var intensity: ExerciseIntensity
+    var form: ExerciseForm
     
-    init(id: UUID = UUID(), name: String, sets: [ExerciseSet], intensity: ExerciseIntensity = .good) {
+    init(id: UUID = UUID(), name: String, sets: [ExerciseSet], form: ExerciseForm = .good) {
         self.id = id
         self.name = name
         self.sets = sets
-        self.intensity = intensity
+        self.form = form
     }
 }
 
