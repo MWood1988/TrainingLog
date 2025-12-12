@@ -38,95 +38,105 @@ struct WorkoutSessionView: View {
             // Dismiss keyboard when tapping outside fields
             focusedField = nil
         }
+        .overlay(alignment: .trailing) {
+            if let focused = focusedField {
+                VStack(spacing: 8) {
+                    switch focused {
+                    case .reps(let exerciseId, let setId):
+                        // Enter button (move to weight)
+                        Button(action: {
+                            focusedField = .weight(exerciseId: exerciseId, setId: setId)
+                        }) {
+                            Text("Enter")
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                                .frame(width: 120)
+                                .padding(.vertical, 6)
+                                .background(Color.blue)
+                                .cornerRadius(10)
+                        }
+                        .buttonStyle(.plain)
+                        
+                        // Next Exercise button
+                        Button(action: {
+                            jumpToNextExercise(from: exerciseId)
+                        }) {
+                            Text("Next Exercise")
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                                .frame(width: 120)
+                                .padding(.vertical, 6)
+                                .background(Color.green)
+                                .cornerRadius(10)
+                        }
+                        .buttonStyle(.plain)
+                        
+                    case .weight(let exerciseId, let setId):
+                        // Enter button (add set or dismiss)
+                        Button(action: {
+                            // Find the exercise and set to determine if we should add a new set
+                            if let exerciseIndex = session.exercises.firstIndex(where: { $0.id == exerciseId }),
+                               let setIndex = session.exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setId }),
+                               setIndex == session.exercises[exerciseIndex].sets.count - 1 {
+                                // This is the last set, add a new one
+                                let newSet = ExerciseSet(reps: 0, weight: 0)
+                                session.exercises[exerciseIndex].sets.append(newSet)
+                                
+                                // Focus on the reps field of the new set
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    focusedField = .reps(exerciseId: exerciseId, setId: newSet.id)
+                                }
+                            } else {
+                                // Not the last set, just dismiss keyboard
+                                focusedField = nil
+                            }
+                        }) {
+                            Text("Enter")
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                                .frame(width: 120)
+                                .padding(.vertical, 6)
+                                .background(Color.blue)
+                                .cornerRadius(10)
+                        }
+                        .buttonStyle(.plain)
+                        
+                        // Next Exercise button
+                        Button(action: {
+                            jumpToNextExercise(from: exerciseId)
+                        }) {
+                            Text("Next Exercise")
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                                .frame(width: 120)
+                                .padding(.vertical, 6)
+                                .background(Color.green)
+                                .cornerRadius(10)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color(.secondarySystemBackground))
+                        .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color(.separator), lineWidth: 0.5)
+                )
+                .frame(maxHeight: .infinity)
+                .padding(.trailing, 13)
+                .offset(y: 160)
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 saveButton
             }
             ToolbarItem(placement: .cancellationAction) {
                 cancelButton
-            }
-            
-            // Add keyboard toolbar here
-            ToolbarItemGroup(placement: .keyboard) {
-                if let focused = focusedField {
-                    HStack(spacing: 8) {
-                        switch focused {
-                        case .reps(let exerciseId, let setId):
-                            // Next Exercise button
-                            Button(action: {
-                                jumpToNextExercise(from: exerciseId)
-                            }) {
-                                Text("Next Exercise")
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
-                                    .background(Color.green)
-                                    .cornerRadius(10)
-                            }
-                            .buttonStyle(.plain)
-                            
-                            // Enter button (move to weight)
-                            Button(action: {
-                                focusedField = .weight(exerciseId: exerciseId, setId: setId)
-                            }) {
-                                Text("Enter")
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
-                                    .background(Color.blue)
-                                    .cornerRadius(10)
-                            }
-                            .buttonStyle(.plain)
-                            
-                        case .weight(let exerciseId, let setId):
-                            // Next Exercise button
-                            Button(action: {
-                                jumpToNextExercise(from: exerciseId)
-                            }) {
-                                Text("Next Exercise")
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
-                                    .background(Color.green)
-                                    .cornerRadius(10)
-                            }
-                            .buttonStyle(.plain)
-                            
-                            // Enter button (add set or dismiss)
-                            Button(action: {
-                                // Find the exercise and set to determine if we should add a new set
-                                if let exerciseIndex = session.exercises.firstIndex(where: { $0.id == exerciseId }),
-                                   let setIndex = session.exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setId }),
-                                   setIndex == session.exercises[exerciseIndex].sets.count - 1 {
-                                    // This is the last set, add a new one
-                                    let newSet = ExerciseSet(reps: 0, weight: 0)
-                                    session.exercises[exerciseIndex].sets.append(newSet)
-                                    
-                                    // Focus on the reps field of the new set
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                        focusedField = .reps(exerciseId: exerciseId, setId: newSet.id)
-                                    }
-                                } else {
-                                    // Not the last set, just dismiss keyboard
-                                    focusedField = nil
-                                }
-                            }) {
-                                Text("Enter")
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 12)
-                                    .background(Color.blue)
-                                    .cornerRadius(10)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 8)
-                }
             }
         }
     }

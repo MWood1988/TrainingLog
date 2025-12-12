@@ -5,6 +5,7 @@ struct ContentView: View {
     @State private var showingNewTemplate = false
     @State private var editMode = false
     @State private var exportFileURL: URL?
+    @State private var showingImport = false  // ADD THIS LINE
     
     var body: some View {
         NavigationView {
@@ -26,8 +27,12 @@ struct ContentView: View {
                 }
             }
             .safeAreaInset(edge: .bottom, alignment: .trailing) {
-                exportButton
-                    .padding()
+                // CHANGE THIS SECTION
+                HStack(spacing: 16) {
+                    importButton
+                    exportButton
+                }
+                .padding()
             }
             .sheet(isPresented: $showingNewTemplate) {
                 NewWorkoutTemplateView(store: store) { template in
@@ -37,6 +42,9 @@ struct ContentView: View {
             }
             .sheet(item: $exportFileURL) { url in
                 ShareSheet(items: [url])
+            }
+            .sheet(isPresented: $showingImport) {  // ADD THIS SHEET
+                ImportView(store: store)
             }
         }
     }
@@ -71,6 +79,22 @@ struct ContentView: View {
         }
     }
     
+    // ADD THIS NEW BUTTON
+    private var importButton: some View {
+        Button {
+            showingImport = true
+        } label: {
+            Image(systemName: "arrow.down.circle.fill")
+                .font(.system(size: 32))
+                .foregroundColor(.green)
+        }
+        .background(
+            Circle()
+                .fill(Color(.systemBackground))
+                .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
+        )
+    }
+    
     private var exportButton: some View {
         Button {
             exportData()
@@ -78,6 +102,11 @@ struct ContentView: View {
             Image(systemName: "square.and.arrow.up.circle.fill")
                 .font(.system(size: 32))
         }
+        .background(
+            Circle()
+                .fill(Color(.systemBackground))
+                .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
+        )
     }
     
     private var addButton: some View {
