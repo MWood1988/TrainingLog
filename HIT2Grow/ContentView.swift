@@ -5,7 +5,8 @@ struct ContentView: View {
     @State private var showingNewTemplate = false
     @State private var editMode = false
     @State private var exportFileURL: URL?
-    @State private var showingImport = false  // ADD THIS LINE
+    @State private var showingImport = false
+    @State private var templateToDelete: WorkoutTemplate?  // Track template pending deletion
     
     var body: some View {
         NavigationView {
@@ -27,7 +28,6 @@ struct ContentView: View {
                 }
             }
             .safeAreaInset(edge: .bottom, alignment: .trailing) {
-                // CHANGE THIS SECTION
                 HStack(spacing: 16) {
                     importButton
                     exportButton
@@ -43,8 +43,19 @@ struct ContentView: View {
             .sheet(item: $exportFileURL) { url in
                 ShareSheet(items: [url])
             }
-            .sheet(isPresented: $showingImport) {  // ADD THIS SHEET
+            .sheet(isPresented: $showingImport) {
                 ImportView(store: store)
+            }
+            .alert("Delete Workout", isPresented: .constant(templateToDelete != nil), presenting: templateToDelete) { template in
+                Button("Cancel", role: .cancel) {
+                    templateToDelete = nil
+                }
+                Button("Delete", role: .destructive) {
+                    deleteTemplate(template)
+                    templateToDelete = nil
+                }
+            } message: { template in
+                Text("Are you sure you want to delete '\(template.name)'?")
             }
         }
     }
@@ -63,13 +74,17 @@ struct ContentView: View {
     
     private func deleteButton(for template: WorkoutTemplate) -> some View {
         Button {
-            if let index = store.templates.firstIndex(where: { $0.id == template.id }) {
-                store.deleteTemplate(at: IndexSet(integer: index))
-            }
+            templateToDelete = template
         } label: {
             Image(systemName: "minus.circle.fill")
                 .foregroundColor(.red)
                 .font(.title2)
+        }
+    }
+    
+    private func deleteTemplate(_ template: WorkoutTemplate) {
+        if let index = store.templates.firstIndex(where: { $0.id == template.id }) {
+            store.deleteTemplate(at: IndexSet(integer: index))
         }
     }
     
@@ -79,12 +94,11 @@ struct ContentView: View {
         }
     }
     
-    // ADD THIS NEW BUTTON
     private var importButton: some View {
         Button {
             showingImport = true
         } label: {
-            Image(systemName: "arrow.down.circle.fill")
+            Image(systemName: "arrow.up.circle.fill")
                 .font(.system(size: 32))
                 .foregroundColor(.green)
         }
@@ -99,7 +113,7 @@ struct ContentView: View {
         Button {
             exportData()
         } label: {
-            Image(systemName: "square.and.arrow.up.circle.fill")
+            Image(systemName: "arrow.down.circle.fill")
                 .font(.system(size: 32))
         }
         .background(

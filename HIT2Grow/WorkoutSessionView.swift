@@ -37,12 +37,6 @@ struct WorkoutSessionView: View {
                 exerciseSection(for: $exercise)
             }
         }
-        .onTapGesture {
-            // Only dismiss keyboard if a field is actually focused
-            if focusedField != nil {
-                focusedField = nil
-            }
-        }
         .overlay(alignment: .trailing) {
             if let focused = focusedField {
                 VStack(spacing: 8) {
@@ -77,23 +71,30 @@ struct WorkoutSessionView: View {
                         .buttonStyle(.plain)
                         
                     case .weight(let exerciseId, let setId):
-                        // Enter button (add set or dismiss)
+                        // Enter button (move to next set or add new set)
                         Button(action: {
-                            // Find the exercise and set to determine if we should add a new set
+                            // Find the exercise and current set
                             if let exerciseIndex = session.exercises.firstIndex(where: { $0.id == exerciseId }),
-                               let setIndex = session.exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setId }),
-                               setIndex == session.exercises[exerciseIndex].sets.count - 1 {
-                                // This is the last set, add a new one
-                                let newSet = ExerciseSet(reps: 0, weight: 0)
-                                session.exercises[exerciseIndex].sets.append(newSet)
+                               let setIndex = session.exercises[exerciseIndex].sets.firstIndex(where: { $0.id == setId }) {
                                 
-                                // Focus on the reps field of the new set
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                    focusedField = .reps(exerciseId: exerciseId, setId: newSet.id)
+                                let isLastSet = setIndex == session.exercises[exerciseIndex].sets.count - 1
+                                
+                                if isLastSet {
+                                    // This is the last set, add a new one
+                                    let newSet = ExerciseSet(reps: 0, weight: 0)
+                                    session.exercises[exerciseIndex].sets.append(newSet)
+                                    
+                                    // Focus on the reps field of the new set
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                        focusedField = .reps(exerciseId: exerciseId, setId: newSet.id)
+                                    }
+                                } else {
+                                    // Not the last set, move to the next set's reps field
+                                    let nextSet = session.exercises[exerciseIndex].sets[setIndex + 1]
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                        focusedField = .reps(exerciseId: exerciseId, setId: nextSet.id)
+                                    }
                                 }
-                            } else {
-                                // Not the last set, just dismiss keyboard
-                                focusedField = nil
                             }
                         }) {
                             Text("Enter")
@@ -206,7 +207,9 @@ struct WorkoutSessionView: View {
     
     private func addSetButton(for exercise: Binding<Exercise>) -> some View {
         Button("Add Set") {
-            exercise.wrappedValue.sets.append(ExerciseSet(reps: 0, weight: 0))
+            var updatedExercise = exercise.wrappedValue
+            updatedExercise.sets.append(ExerciseSet(reps: 0, weight: 0))
+            exercise.wrappedValue = updatedExercise
         }
     }
     

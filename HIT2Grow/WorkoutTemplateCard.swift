@@ -46,6 +46,7 @@ struct WorkoutTemplateCard: View {
                 color: .blue
             )
         }
+        .frame(maxWidth: .infinity)  // Add this to make it flex equally
     }
     
     private var startWorkoutButton: some View {
@@ -58,6 +59,7 @@ struct WorkoutTemplateCard: View {
                 color: .green
             )
         }
+        .frame(maxWidth: .infinity)  // Add this to make it flex equally
     }
     
     private var cardBackground: some View {
@@ -84,6 +86,7 @@ struct ActionButton: View {
             Text(title)
         }
         .font(.subheadline)
+        .frame(maxWidth: .infinity)  // Make button fill available space
         .padding(.vertical, 8)
         .padding(.horizontal, 16)
         .background(color.opacity(0.2))
