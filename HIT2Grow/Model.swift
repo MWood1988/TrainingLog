@@ -5,10 +5,12 @@ import SwiftUI
 struct ExerciseLibraryItem: Identifiable, Codable, Equatable {
     let id: UUID
     var name: String
+    var notes: String  // NEW: Notes field for exercise instructions
     
-    init(id: UUID = UUID(), name: String) {
+    init(id: UUID = UUID(), name: String, notes: String = "") {
         self.id = id
         self.name = name
+        self.notes = notes
     }
 }
 

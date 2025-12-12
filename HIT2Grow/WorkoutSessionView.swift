@@ -4,6 +4,8 @@ struct WorkoutSessionView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var session: WorkoutSession
     @FocusState private var focusedField: FocusedField?
+    @State private var showingNotesFor: UUID?  // NEW: Track which exercise notes to show
+    @ObservedObject var store: WorkoutStore  // NEW: Need store to access notes
     
     let onSave: (WorkoutSession) -> Void
     
@@ -12,7 +14,8 @@ struct WorkoutSessionView: View {
         case weight(exerciseId: UUID, setId: UUID)
     }
     
-    init(template: WorkoutTemplate, existingSession: WorkoutSession? = nil, onSave: @escaping (WorkoutSession) -> Void) {
+    init(template: WorkoutTemplate, store: WorkoutStore, existingSession: WorkoutSession? = nil, onSave: @escaping (WorkoutSession) -> Void) {
+        self.store = store
         if let existing = existingSession {
             _session = State(initialValue: existing)
         } else {
@@ -35,8 +38,10 @@ struct WorkoutSessionView: View {
             }
         }
         .onTapGesture {
-            // Dismiss keyboard when tapping outside fields
-            focusedField = nil
+            // Only dismiss keyboard if a field is actually focused
+            if focusedField != nil {
+                focusedField = nil
+            }
         }
         .overlay(alignment: .trailing) {
             if let focused = focusedField {
@@ -131,6 +136,11 @@ struct WorkoutSessionView: View {
                 .offset(y: 160)
             }
         }
+        .sheet(item: $showingNotesFor) { exerciseId in
+            if let exercise = session.exercises.first(where: { $0.exerciseId == exerciseId }) {
+                ExerciseNotesView(store: store, exerciseId: exerciseId, exerciseName: exercise.name)
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 saveButton
@@ -143,9 +153,23 @@ struct WorkoutSessionView: View {
     
     private func exerciseSection(for exercise: Binding<Exercise>) -> some View {
         let hasValidSets = exercise.wrappedValue.sets.contains { $0.reps > 0 }
+        let exerciseNotes = store.getExerciseNotes(exerciseId: exercise.wrappedValue.exerciseId)
+        let hasNotes = !exerciseNotes.isEmpty
         
         return Section(
-            header: Text(exercise.wrappedValue.name),
+            header: HStack {
+                Text(exercise.wrappedValue.name)
+                Spacer()
+                // NEW: Info icon button
+                Button(action: {
+                    showingNotesFor = exercise.wrappedValue.exerciseId
+                }) {
+                    Image(systemName: hasNotes ? "info.circle.fill" : "info.circle")
+                        .foregroundColor(hasNotes ? .blue : .secondary)
+                        .font(.body)
+                }
+                .buttonStyle(.plain)
+            },
             footer: hasValidSets ? nil : Text("This exercise will not be saved (no reps recorded)")
                 .font(.caption)
                 .foregroundColor(.orange)
@@ -323,4 +347,9 @@ struct FormButton: View {
         }
         .buttonStyle(.plain)
     }
+}
+
+// NEW: Make UUID Identifiable for sheet presentation
+extension UUID: @retroactive Identifiable {
+    public var id: UUID { self }
 }

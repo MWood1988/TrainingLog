@@ -39,6 +39,19 @@ class WorkoutStore: ObservableObject {
         exerciseLibrary.contains(where: { $0.name.lowercased() == name.lowercased() })
     }
     
+    // NEW: Update exercise notes
+    func updateExerciseNotes(exerciseId: UUID, notes: String) {
+        if let index = exerciseLibrary.firstIndex(where: { $0.id == exerciseId }) {
+            exerciseLibrary[index].notes = notes
+            saveExerciseLibrary()
+        }
+    }
+    
+    // NEW: Get exercise notes
+    func getExerciseNotes(exerciseId: UUID) -> String {
+        return exerciseLibrary.first(where: { $0.id == exerciseId })?.notes ?? ""
+    }
+    
     // MARK: - Templates
     
     func addTemplate(_ template: WorkoutTemplate) {

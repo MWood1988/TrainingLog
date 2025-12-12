@@ -324,7 +324,7 @@ struct SessionHistoryRow: View {
     private var destinationView: some View {
         // Get the actual template for this session
         let sessionTemplate = store.templates.first(where: { $0.id == session.templateId }) ?? template
-        return WorkoutSessionView(template: sessionTemplate, existingSession: session) { updatedSession in
+        return WorkoutSessionView(template: sessionTemplate, store: store, existingSession: session) { updatedSession in
             store.updateSession(updatedSession)
         }
     }

@@ -49,7 +49,7 @@ struct WorkoutTemplateCard: View {
     }
     
     private var startWorkoutButton: some View {
-        NavigationLink(destination: WorkoutSessionView(template: template) { newSession in
+        NavigationLink(destination: WorkoutSessionView(template: template, store: store) { newSession in
             store.addSession(newSession)
         }) {
             ActionButton(
