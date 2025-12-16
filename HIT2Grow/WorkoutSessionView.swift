@@ -48,6 +48,11 @@ struct WorkoutSessionView: View {
                 exerciseSection(for: $exercise)
             }
         }
+        .contentShape(Rectangle()) // Make entire background tappable
+        .onTapGesture {
+            // Dismiss keyboard when tapping outside text fields
+            focusedField = nil
+        }
         .overlay(alignment: .trailing) {
             if let focused = focusedField {
                 VStack(spacing: 8) {
@@ -350,7 +355,6 @@ struct SetRowEditor: View {
             
             TextField("Weight", text: weightBinding)
                 .keyboardType(.decimalPad)
-                .environment(\.locale, Locale(identifier: "en_US"))
                 .focused($focusedField, equals: .weight(exerciseId: exerciseId, setId: set.id))
         }
     }
@@ -371,16 +375,12 @@ struct SetRowEditor: View {
                 if set.weight == 0 {
                     return ""
                 } else {
-                    // Use the user's locale for display
-                    let formatter = NumberFormatter()
-                    formatter.numberStyle = .decimal
-                    formatter.maximumFractionDigits = 2
-                    formatter.minimumFractionDigits = 0
-                    return formatter.string(from: NSNumber(value: set.weight)) ?? String(format: "%.2f", set.weight)
+                    // Always format with period as decimal separator
+                    return String(format: "%.2f", set.weight).replacingOccurrences(of: ".00", with: "")
                 }
             },
             set: { newValue in
-                // Replace comma with period for parsing
+                // Accept both comma and period, but convert comma to period for parsing
                 let normalizedValue = newValue.replacingOccurrences(of: ",", with: ".")
                 if let value = Double(normalizedValue) {
                     // Round to 2 decimal places

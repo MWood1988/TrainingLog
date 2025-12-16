@@ -164,8 +164,12 @@ struct ContentView: View {
     private func exportData() {
         let csvString = generateCSV()
         
-        // Create a temporary file
-        let fileName = "workout_export_\(Date().ISO8601Format()).csv"
+        // Create a temporary file with abbreviated date/time
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyyMMdd_HHmm"
+        let dateTimeString = dateFormatter.string(from: Date())
+        
+        let fileName = "HITLog Export \(dateTimeString).csv"
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
         
         do {
