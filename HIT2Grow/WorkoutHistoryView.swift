@@ -4,6 +4,7 @@ import Charts
 struct WorkoutHistoryView: View {
     let template: WorkoutTemplate
     @ObservedObject var store: WorkoutStore
+    @State private var editMode = false
     
     private var exerciseSections: [(exerciseName: String, exerciseId: UUID, records: [(WorkoutSession, Exercise)])] {
         // Build sections for each exercise in the template
@@ -33,7 +34,8 @@ struct WorkoutHistoryView: View {
                         exerciseId: section.exerciseId,
                         records: section.records,
                         template: template,
-                        store: store
+                        store: store,
+                        editMode: $editMode
                     )
                 }
             }
@@ -41,6 +43,13 @@ struct WorkoutHistoryView: View {
         }
         .navigationTitle("\(template.name) History")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(editMode ? "Done" : "Edit") {
+                    editMode.toggle()
+                }
+            }
+        }
     }
 }
 
@@ -50,8 +59,10 @@ struct ExerciseHistorySection: View {
     let records: [(WorkoutSession, Exercise)]
     let template: WorkoutTemplate
     @ObservedObject var store: WorkoutStore
+    @Binding var editMode: Bool
     
     @State private var showAllRecords = false
+    @State private var sessionToDelete: WorkoutSession?
     
     // Get all sessions for this exercise across ALL templates
     private var allRecords: [(WorkoutSession, Exercise)] {
@@ -60,6 +71,11 @@ struct ExerciseHistorySection: View {
     
     private var sortedRecords: [(WorkoutSession, Exercise)] {
         allRecords.sorted { $0.0.date > $1.0.date }
+    }
+    
+    // Sorted records for chart (oldest to newest for chronological display)
+    private var chartSortedRecords: [(WorkoutSession, Exercise)] {
+        allRecords.sorted { $0.0.date < $1.0.date }
     }
     
     private var displayedRecords: [(WorkoutSession, Exercise)] {
@@ -71,7 +87,7 @@ struct ExerciseHistorySection: View {
     }
     
     private var chartData: [(Date, Double)] {
-        sortedRecords.map { session, exercise in
+        chartSortedRecords.map { session, exercise in
             let weights = exercise.sets.map { $0.weight }
             let maxWeight = weights.max() ?? 0
             return (session.date, maxWeight)
@@ -122,13 +138,27 @@ struct ExerciseHistorySection: View {
                 // Session Records
                 VStack(spacing: 12) {
                     ForEach(displayedRecords, id: \.0.id) { session, exercise in
-                        SessionHistoryRow(
-                            session: session,
-                            exercise: exercise,
-                            template: template,
-                            store: store,
-                            showTemplateName: true
-                        )
+                        HStack(spacing: 12) {
+                            if editMode {
+                                Button {
+                                    sessionToDelete = session
+                                } label: {
+                                    Image(systemName: "minus.circle.fill")
+                                        .foregroundColor(.red)
+                                        .font(.title2)
+                                }
+                                .transition(.scale)
+                            }
+                            
+                            SessionHistoryRow(
+                                session: session,
+                                exercise: exercise,
+                                template: template,
+                                store: store,
+                                showTemplateName: true
+                            )
+                        }
+                        .animation(.default, value: editMode)
                     }
                 }
                 
@@ -162,6 +192,28 @@ struct ExerciseHistorySection: View {
                 .padding(.top, 8)
         }
         .padding(.horizontal)
+        .alert("Delete Session", isPresented: .constant(sessionToDelete != nil), presenting: sessionToDelete) { session in
+            Button("Cancel", role: .cancel) {
+                sessionToDelete = nil
+            }
+            Button("Delete", role: .destructive) {
+                deleteSession(session)
+                sessionToDelete = nil
+            }
+        } message: { session in
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "MMM d, yyyy 'at' h:mm a"
+            let dateString = dateFormatter.string(from: session.date)
+            return Text("Are you sure you want to delete the session from \(dateString)?")
+        }
+    }
+    
+    private func deleteSession(_ session: WorkoutSession) {
+        // Remove the session from the store
+        if let index = store.sessions.firstIndex(where: { $0.id == session.id }) {
+            store.sessions.remove(at: index)
+            store.saveSessions()
+        }
     }
 }
 

@@ -98,7 +98,7 @@ struct ContentView: View {
         Button {
             showingImport = true
         } label: {
-            Image(systemName: "arrow.up.circle.fill")
+            Image(systemName: "arrow.down.circle.fill")
                 .font(.system(size: 32))
                 .foregroundColor(.green)
         }
@@ -113,7 +113,7 @@ struct ContentView: View {
         Button {
             exportData()
         } label: {
-            Image(systemName: "arrow.down.circle.fill")
+            Image(systemName: "square.and.arrow.up.circle.fill")
                 .font(.system(size: 32))
         }
         .background(

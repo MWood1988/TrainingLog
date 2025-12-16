@@ -52,6 +52,27 @@ class WorkoutStore: ObservableObject {
         return exerciseLibrary.first(where: { $0.id == exerciseId })?.notes ?? ""
     }
     
+    // Delete exercise from library and all associated data
+    func deleteExercise(_ exercise: ExerciseLibraryItem) {
+        // Remove from exercise library
+        exerciseLibrary.removeAll { $0.id == exercise.id }
+        saveExerciseLibrary()
+        
+        // Remove from all templates
+        for i in 0..<templates.count {
+            templates[i].exercises.removeAll { $0.exerciseId == exercise.id }
+        }
+        saveTemplates()
+        
+        // Remove from all sessions
+        for i in 0..<sessions.count {
+            sessions[i].exercises.removeAll { $0.exerciseId == exercise.id }
+        }
+        // Remove sessions that have no exercises left
+        sessions.removeAll { $0.exercises.isEmpty }
+        saveSessions()
+    }
+    
     // MARK: - Templates
     
     func addTemplate(_ template: WorkoutTemplate) {
@@ -133,7 +154,8 @@ class WorkoutStore: ObservableObject {
         sessions = decoded
     }
     
-    private func saveSessions() {
+    // Made public so WorkoutHistoryView can call it after deleting sessions
+    func saveSessions() {
         guard let encoded = try? JSONEncoder().encode(sessions) else { return }
         UserDefaults.standard.set(encoded, forKey: sessionsKey)
     }

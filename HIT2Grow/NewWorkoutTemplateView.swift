@@ -23,6 +23,9 @@ struct NewWorkoutTemplateView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     cancelButton
                 }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    EditButton()
+                }
             }
             .sheet(isPresented: $showingExercisePicker) {
                 ExercisePickerView(store: store) { exercise in
@@ -76,6 +79,7 @@ struct NewWorkoutTemplateView: View {
                 }
             }
             .onDelete(perform: deleteExercise)
+            .onMove(perform: moveExercise)
         }
     }
     
@@ -105,6 +109,10 @@ struct NewWorkoutTemplateView: View {
         exercises.remove(atOffsets: offsets)
     }
     
+    private func moveExercise(from source: IndexSet, to destination: Int) {
+        exercises.move(fromOffsets: source, toOffset: destination)
+    }
+    
     private func saveTemplate() {
         let template = WorkoutTemplate(name: templateName, exercises: exercises)
         onSave(template)
@@ -118,6 +126,8 @@ struct ExercisePickerView: View {
     @ObservedObject var store: WorkoutStore
     @State private var searchText = ""
     @State private var showingNewExercise = false
+    @State private var editMode = false
+    @State private var exerciseToDelete: ExerciseLibraryItem?
     
     let onSelect: (ExerciseLibraryItem) -> Void
     
@@ -150,6 +160,11 @@ struct ExercisePickerView: View {
                         dismiss()
                     }
                 }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(editMode ? "Done" : "Edit") {
+                        editMode.toggle()
+                    }
+                }
             }
             .alert("New Exercise", isPresented: $showingNewExercise) {
                 TextField("Exercise Name", text: $searchText)
@@ -159,6 +174,17 @@ struct ExercisePickerView: View {
                 Button("Cancel", role: .cancel) { }
             } message: {
                 Text("Create a new exercise named '\(searchText)'?")
+            }
+            .alert("Delete Exercise", isPresented: .constant(exerciseToDelete != nil), presenting: exerciseToDelete) { exercise in
+                Button("Cancel", role: .cancel) {
+                    exerciseToDelete = nil
+                }
+                Button("Delete", role: .destructive) {
+                    deleteExercise(exercise)
+                    exerciseToDelete = nil
+                }
+            } message: { exercise in
+                Text("Are you sure you want to delete '\(exercise.name)'? This will remove it from all workouts and delete all associated session data.")
             }
         }
     }
@@ -212,7 +238,22 @@ struct ExercisePickerView: View {
     private var exerciseList: some View {
         List {
             ForEach(filteredExercises) { exercise in
-                exerciseRow(exercise)
+                HStack(spacing: 12) {
+                    if editMode {
+                        Button {
+                            exerciseToDelete = exercise
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundColor(.red)
+                                .font(.title2)
+                        }
+                        .buttonStyle(.plain)
+                        .transition(.scale)
+                    }
+                    
+                    exerciseRow(exercise)
+                }
+                .animation(.default, value: editMode)
             }
         }
         .listStyle(.plain)
@@ -220,8 +261,10 @@ struct ExercisePickerView: View {
     
     private func exerciseRow(_ exercise: ExerciseLibraryItem) -> some View {
         Button {
-            onSelect(exercise)
-            dismiss()
+            if !editMode {
+                onSelect(exercise)
+                dismiss()
+            }
         } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
@@ -240,12 +283,15 @@ struct ExercisePickerView: View {
                     }
                 }
                 Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                if !editMode {
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
             .padding(.vertical, 4)
         }
+        .disabled(editMode)
     }
     
     private func createNewExercise() {
@@ -253,5 +299,9 @@ struct ExercisePickerView: View {
         let newExercise = store.getOrCreateExercise(name: searchText)
         onSelect(newExercise)
         dismiss()
+    }
+    
+    private func deleteExercise(_ exercise: ExerciseLibraryItem) {
+        store.deleteExercise(exercise)
     }
 }
