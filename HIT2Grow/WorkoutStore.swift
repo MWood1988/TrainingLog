@@ -80,6 +80,13 @@ class WorkoutStore: ObservableObject {
         saveTemplates()
     }
     
+    func updateTemplate(_ template: WorkoutTemplate) {
+        if let index = templates.firstIndex(where: { $0.id == template.id }) {
+            templates[index] = template
+            saveTemplates()
+        }
+    }
+    
     func deleteTemplate(at offsets: IndexSet) {
         templates.remove(atOffsets: offsets)
         saveTemplates()

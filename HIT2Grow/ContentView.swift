@@ -7,6 +7,8 @@ struct ContentView: View {
     @State private var exportFileURL: URL?
     @State private var showingImport = false
     @State private var templateToDelete: WorkoutTemplate?  // Track template pending deletion
+    @State private var templateToEdit: WorkoutTemplate?  // Track template being edited
+    @State private var showingEditSheet = false  // Simple boolean for testing
     
     var body: some View {
         NavigationView {
@@ -40,6 +42,18 @@ struct ContentView: View {
                     showingNewTemplate = false
                 }
             }
+            .sheet(isPresented: $showingEditSheet) {
+                if let template = templateToEdit {
+                    EditWorkoutTemplateView(store: store, template: template) { updatedTemplate in
+                        store.updateTemplate(updatedTemplate)
+                        showingEditSheet = false
+                        templateToEdit = nil
+                    }
+                }
+            }
+            .onChange(of: showingEditSheet) { oldValue, newValue in
+                print("showingEditSheet changed from \(oldValue) to \(newValue)")
+            }
             .sheet(item: $exportFileURL) { url in
                 ShareSheet(items: [url])
             }
@@ -66,7 +80,22 @@ struct ContentView: View {
                 deleteButton(for: template)
                     .transition(.scale)
             }
+            
             WorkoutTemplateCard(template: template, store: store)
+                .overlay(
+                    Group {
+                        if editMode {
+                            Color.clear
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    print("Overlay tapped for: \(template.name)")
+                                    templateToEdit = template
+                                    showingEditSheet = true
+                                    print("showingEditSheet set to true, templateToEdit: \(template.name)")
+                                }
+                        }
+                    }
+                )
         }
         .padding(.horizontal)
         .animation(.default, value: editMode)
