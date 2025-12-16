@@ -10,9 +10,9 @@ struct ImportView: View {
     @State private var importStats: ImportStats?
     
     struct ImportStats {
-        let sessionsImported: Int
-        let exercisesImported: Int
-        let templatesCreated: Int
+        let rowsImported: Int
+        let rowsSkipped: Int
+        let sessionsAffected: Int
     }
     
     var body: some View {
@@ -28,7 +28,7 @@ struct ImportView: View {
                     .font(.title2)
                     .fontWeight(.bold)
                 
-                Text("Select a CSV file exported from HIT2Grow")
+                Text("Select a CSV file exported from HIT2Grow. Only new unique rows will be added.")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -52,9 +52,30 @@ struct ImportView: View {
                         Text("Import Complete!")
                             .font(.headline)
                             .foregroundColor(.green)
-                        Text("Templates created: \(stats.templatesCreated)")
-                        Text("Sessions imported: \(stats.sessionsImported)")
-                        Text("Exercises found: \(stats.exercisesImported)")
+                        
+                        if stats.rowsImported > 0 {
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                Text("Rows added: \(stats.rowsImported)")
+                            }
+                        }
+                        
+                        if stats.rowsSkipped > 0 {
+                            HStack {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.orange)
+                                Text("Duplicate rows skipped: \(stats.rowsSkipped)")
+                            }
+                        }
+                        
+                        if stats.sessionsAffected > 0 {
+                            HStack {
+                                Image(systemName: "doc.text.fill")
+                                    .foregroundColor(.blue)
+                                Text("Sessions affected: \(stats.sessionsAffected)")
+                            }
+                        }
                     }
                     .padding()
                     .background(Color(.systemGray6))
@@ -113,7 +134,21 @@ struct ImportView: View {
             let stats = parseAndImportCSV(csvString)
             
             importStats = stats
-            alertMessage = "Successfully imported \(stats.sessionsImported) sessions!"
+            
+            // Create a detailed message
+            var message = ""
+            if stats.rowsImported > 0 {
+                message += "Successfully added \(stats.rowsImported) new row\(stats.rowsImported == 1 ? "" : "s")!"
+            }
+            if stats.rowsSkipped > 0 {
+                if !message.isEmpty { message += "\n" }
+                message += "Skipped \(stats.rowsSkipped) duplicate row\(stats.rowsSkipped == 1 ? "" : "s")."
+            }
+            if stats.rowsImported == 0 && stats.rowsSkipped == 0 {
+                message = "No rows found to import."
+            }
+            
+            alertMessage = message
             showAlert = true
             
         } catch {
@@ -122,21 +157,88 @@ struct ImportView: View {
         }
     }
     
+    // Represents a single row from the CSV
+    struct CSVRow: Hashable {
+        let date: Date
+        let templateName: String
+        let exerciseName: String
+        let setNumber: Int
+        let reps: Int
+        let weight: Double
+        let form: String
+        
+        // Normalize date to minute precision for consistent hashing
+        var normalizedDate: Date {
+            let calendar = Calendar.current
+            let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+            return calendar.date(from: components) ?? date
+        }
+        
+        // Normalize weight to 1 decimal place
+        var normalizedWeight: Int {
+            return Int((weight * 10).rounded())
+        }
+        
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(normalizedDate)
+            hasher.combine(templateName)
+            hasher.combine(exerciseName)
+            hasher.combine(setNumber)
+            hasher.combine(reps)
+            hasher.combine(normalizedWeight)
+            hasher.combine(form)
+        }
+        
+        static func == (lhs: CSVRow, rhs: CSVRow) -> Bool {
+            return lhs.normalizedDate == rhs.normalizedDate &&
+                   lhs.templateName == rhs.templateName &&
+                   lhs.exerciseName == rhs.exerciseName &&
+                   lhs.setNumber == rhs.setNumber &&
+                   lhs.reps == rhs.reps &&
+                   lhs.normalizedWeight == rhs.normalizedWeight &&
+                   lhs.form == rhs.form
+        }
+    }
+    
     private func parseAndImportCSV(_ csvString: String) -> ImportStats {
         let lines = csvString.components(separatedBy: .newlines)
         
         // Skip header row
         guard lines.count > 1 else {
-            return ImportStats(sessionsImported: 0, exercisesImported: 0, templatesCreated: 0)
+            return ImportStats(rowsImported: 0, rowsSkipped: 0, sessionsAffected: 0)
         }
-        
-        // Dictionary to group rows by session (date + time + template)
-        var sessionGroups: [String: [(date: Date, templateName: String, exerciseName: String, setNumber: Int, reps: Int, weight: Double, form: String)]] = [:]
         
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd HH:mm"
         
-        // Parse all rows
+        // Build a set of all existing rows in the database
+        var existingRows = Set<CSVRow>()
+        
+        for session in store.sessions {
+            guard let template = store.templates.first(where: { $0.id == session.templateId }) else {
+                continue
+            }
+            
+            for exercise in session.exercises {
+                for (index, set) in exercise.sets.enumerated() {
+                    let row = CSVRow(
+                        date: session.date,
+                        templateName: template.name,
+                        exerciseName: exercise.name,
+                        setNumber: index + 1,
+                        reps: set.reps,
+                        weight: set.weight,
+                        form: exercise.form.rawValue
+                    )
+                    existingRows.insert(row)
+                }
+            }
+        }
+        
+        // Parse CSV rows and check for duplicates
+        var rowsToImport: [CSVRow] = []
+        var rowsSkipped = 0
+        
         for line in lines.dropFirst() {
             guard !line.isEmpty else { continue }
             
@@ -157,13 +259,7 @@ struct ImportView: View {
                 continue
             }
             
-            let sessionKey = "\(dateString)_\(timeString)_\(templateName)"
-            
-            if sessionGroups[sessionKey] == nil {
-                sessionGroups[sessionKey] = []
-            }
-            
-            sessionGroups[sessionKey]?.append((
+            let csvRow = CSVRow(
                 date: date,
                 templateName: templateName,
                 exerciseName: exerciseName,
@@ -171,15 +267,37 @@ struct ImportView: View {
                 reps: reps,
                 weight: weight,
                 form: form
-            ))
+            )
+            
+            // Check if this row already exists
+            if existingRows.contains(csvRow) {
+                rowsSkipped += 1
+            } else {
+                rowsToImport.append(csvRow)
+                existingRows.insert(csvRow) // Add to set to prevent duplicates within the import file itself
+            }
         }
         
-        var templatesCreated = 0
-        var sessionsImported = 0
-        var exercisesSet: Set<String> = []
+        // Group rows by session (date + time + template)
+        var sessionGroups: [String: [CSVRow]] = [:]
+        
+        for row in rowsToImport {
+            let dateFormatter2 = DateFormatter()
+            dateFormatter2.dateFormat = "yyyy-MM-dd HH:mm"
+            let dateTimeString = dateFormatter2.string(from: row.date)
+            let sessionKey = "\(dateTimeString)|\(row.templateName)"
+            
+            if sessionGroups[sessionKey] == nil {
+                sessionGroups[sessionKey] = []
+            }
+            sessionGroups[sessionKey]?.append(row)
+        }
+        
+        var sessionsAffected = 0
+        var templatesCreatedOrUpdated: Set<String> = []
         
         // Process each session group
-        for (_, rows) in sessionGroups {
+        for (sessionKey, rows) in sessionGroups {
             guard let firstRow = rows.first else { continue }
             
             let templateName = firstRow.templateName
@@ -188,76 +306,110 @@ struct ImportView: View {
             // Find or create template
             var template = store.templates.first { $0.name == templateName }
             if template == nil {
-                // Create new template with exercises from this session
-                let uniqueExerciseNames = Set(rows.map { $0.exerciseName })
-                let exerciseTemplates = uniqueExerciseNames.map { name -> ExerciseTemplate in
-                    let libraryItem = store.getOrCreateExercise(name: name)
-                    exercisesSet.insert(name)
-                    return ExerciseTemplate(exerciseId: libraryItem.id, name: name)
-                }
-                
-                template = WorkoutTemplate(name: templateName, exercises: exerciseTemplates)
+                // Create new template
+                template = WorkoutTemplate(name: templateName, exercises: [])
                 store.addTemplate(template!)
-                templatesCreated += 1
+                templatesCreatedOrUpdated.insert(templateName)
             }
             
-            guard let finalTemplate = template else { continue }
+            guard var finalTemplate = template else { continue }
             
-            // Group rows by exercise
-            var exerciseGroups: [String: [(setNumber: Int, reps: Int, weight: Double, form: String)]] = [:]
-            for row in rows {
-                if exerciseGroups[row.exerciseName] == nil {
-                    exerciseGroups[row.exerciseName] = []
+            // Check if a session already exists for this date/time and template
+            let existingSession = store.sessions.first { session in
+                guard session.templateId == finalTemplate.id else { return false }
+                let timeDiff = abs(session.date.timeIntervalSince(sessionDate))
+                return timeDiff < 60
+            }
+            
+            if let existingSession = existingSession {
+                // Add rows to existing session
+                var updatedSession = existingSession
+                
+                // Group new rows by exercise
+                let exerciseGroups = Dictionary(grouping: rows, by: { $0.exerciseName })
+                
+                for (exerciseName, exerciseRows) in exerciseGroups {
+                    let libraryItem = store.getOrCreateExercise(name: exerciseName)
+                    
+                    // Add exercise to template if not already there
+                    if !finalTemplate.exercises.contains(where: { $0.exerciseId == libraryItem.id }) {
+                        let exerciseTemplate = ExerciseTemplate(exerciseId: libraryItem.id, name: libraryItem.name)
+                        finalTemplate.exercises.append(exerciseTemplate)
+                        store.updateTemplate(finalTemplate)
+                    }
+                    
+                    // Find or create exercise in session
+                    if let exerciseIndex = updatedSession.exercises.firstIndex(where: { $0.exerciseId == libraryItem.id }) {
+                        // Add sets to existing exercise
+                        let sortedRows = exerciseRows.sorted(by: { $0.setNumber < $1.setNumber })
+                        for row in sortedRows {
+                            let newSet = ExerciseSet(reps: row.reps, weight: row.weight)
+                            updatedSession.exercises[exerciseIndex].sets.append(newSet)
+                        }
+                    } else {
+                        // Create new exercise with sets
+                        let sortedRows = exerciseRows.sorted(by: { $0.setNumber < $1.setNumber })
+                        let sets = sortedRows.map { ExerciseSet(reps: $0.reps, weight: $0.weight) }
+                        let form = ExerciseForm(rawValue: exerciseRows.first?.form ?? "Good") ?? .good
+                        
+                        let newExercise = Exercise(
+                            exerciseId: libraryItem.id,
+                            name: exerciseName,
+                            sets: sets,
+                            form: form
+                        )
+                        updatedSession.exercises.append(newExercise)
+                    }
                 }
-                exerciseGroups[row.exerciseName]?.append((
-                    setNumber: row.setNumber,
-                    reps: row.reps,
-                    weight: row.weight,
-                    form: row.form
-                ))
-            }
-            
-            // Create exercises for session
-            var sessionExercises: [Exercise] = []
-            for (exerciseName, sets) in exerciseGroups {
-                // Get or create exercise in library
-                let libraryItem = store.getOrCreateExercise(name: exerciseName)
-                exercisesSet.insert(exerciseName)
                 
-                // Sort sets by set number
-                let sortedSets = sets.sorted { $0.setNumber < $1.setNumber }
+                store.updateSession(updatedSession)
+                sessionsAffected += 1
                 
-                // Convert to ExerciseSet objects
-                let exerciseSets = sortedSets.map { ExerciseSet(reps: $0.reps, weight: $0.weight) }
+            } else {
+                // Create new session
+                let exerciseGroups = Dictionary(grouping: rows, by: { $0.exerciseName })
+                var sessionExercises: [Exercise] = []
                 
-                // Parse form
-                let form = ExerciseForm(rawValue: sets.first?.form ?? "Good") ?? .good
+                for (exerciseName, exerciseRows) in exerciseGroups {
+                    let libraryItem = store.getOrCreateExercise(name: exerciseName)
+                    
+                    // Add exercise to template if not already there
+                    if !finalTemplate.exercises.contains(where: { $0.exerciseId == libraryItem.id }) {
+                        let exerciseTemplate = ExerciseTemplate(exerciseId: libraryItem.id, name: libraryItem.name)
+                        finalTemplate.exercises.append(exerciseTemplate)
+                        store.updateTemplate(finalTemplate)
+                    }
+                    
+                    // Sort rows by set number
+                    let sortedRows = exerciseRows.sorted(by: { $0.setNumber < $1.setNumber })
+                    let sets = sortedRows.map { ExerciseSet(reps: $0.reps, weight: $0.weight) }
+                    let form = ExerciseForm(rawValue: exerciseRows.first?.form ?? "Good") ?? .good
+                    
+                    let exercise = Exercise(
+                        exerciseId: libraryItem.id,
+                        name: exerciseName,
+                        sets: sets,
+                        form: form
+                    )
+                    
+                    sessionExercises.append(exercise)
+                }
                 
-                let exercise = Exercise(
-                    exerciseId: libraryItem.id,
-                    name: exerciseName,
-                    sets: exerciseSets,
-                    form: form
+                let session = WorkoutSession(
+                    templateId: finalTemplate.id,
+                    date: sessionDate,
+                    exercises: sessionExercises
                 )
                 
-                sessionExercises.append(exercise)
+                store.addSession(session)
+                sessionsAffected += 1
             }
-            
-            // Create and save session
-            let session = WorkoutSession(
-                templateId: finalTemplate.id,
-                date: sessionDate,
-                exercises: sessionExercises
-            )
-            
-            store.addSession(session)
-            sessionsImported += 1
         }
         
         return ImportStats(
-            sessionsImported: sessionsImported,
-            exercisesImported: exercisesSet.count,
-            templatesCreated: templatesCreated
+            rowsImported: rowsToImport.count,
+            rowsSkipped: rowsSkipped,
+            sessionsAffected: sessionsAffected
         )
     }
     
