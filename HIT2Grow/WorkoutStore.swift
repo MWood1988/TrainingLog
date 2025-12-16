@@ -9,11 +9,43 @@ class WorkoutStore: ObservableObject {
     private let templatesKey = "templates"
     private let sessionsKey = "sessions"
     private let exerciseLibraryKey = "exerciseLibrary"
+    private let draftSessionsKey = "draftSessions"
     
     init() {
         loadExerciseLibrary()
         loadTemplates()
         loadSessions()
+    }
+    
+    // MARK: - Draft Session Management
+    
+    func saveDraft(_ session: WorkoutSession) {
+        var drafts = loadAllDrafts()
+        drafts[session.templateId] = session
+        
+        guard let encoded = try? JSONEncoder().encode(drafts) else { return }
+        UserDefaults.standard.set(encoded, forKey: draftSessionsKey)
+    }
+    
+    func loadDraft(for templateId: UUID) -> WorkoutSession? {
+        let drafts = loadAllDrafts()
+        return drafts[templateId]
+    }
+    
+    func clearDraft(for templateId: UUID) {
+        var drafts = loadAllDrafts()
+        drafts.removeValue(forKey: templateId)
+        
+        guard let encoded = try? JSONEncoder().encode(drafts) else { return }
+        UserDefaults.standard.set(encoded, forKey: draftSessionsKey)
+    }
+    
+    private func loadAllDrafts() -> [UUID: WorkoutSession] {
+        guard let data = UserDefaults.standard.data(forKey: draftSessionsKey),
+              let decoded = try? JSONDecoder().decode([UUID: WorkoutSession].self, from: data) else {
+            return [:]
+        }
+        return decoded
     }
     
     // MARK: - Exercise Library
@@ -39,7 +71,6 @@ class WorkoutStore: ObservableObject {
         exerciseLibrary.contains(where: { $0.name.lowercased() == name.lowercased() })
     }
     
-    // NEW: Update exercise notes
     func updateExerciseNotes(exerciseId: UUID, notes: String) {
         if let index = exerciseLibrary.firstIndex(where: { $0.id == exerciseId }) {
             exerciseLibrary[index].notes = notes
@@ -47,7 +78,6 @@ class WorkoutStore: ObservableObject {
         }
     }
     
-    // NEW: Get exercise notes
     func getExerciseNotes(exerciseId: UUID) -> String {
         return exerciseLibrary.first(where: { $0.id == exerciseId })?.notes ?? ""
     }

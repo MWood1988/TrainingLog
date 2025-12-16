@@ -4,6 +4,7 @@ struct WorkoutTemplateCard: View {
     let template: WorkoutTemplate
     @ObservedObject var store: WorkoutStore
     @State private var isPressed = false
+    @State private var navigationID = UUID()
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -46,20 +47,25 @@ struct WorkoutTemplateCard: View {
                 color: .blue
             )
         }
-        .frame(maxWidth: .infinity)  // Add this to make it flex equally
+        .frame(maxWidth: .infinity)
     }
     
     private var startWorkoutButton: some View {
-        NavigationLink(destination: WorkoutSessionView(template: template, store: store) { newSession in
-            store.addSession(newSession)
-        }) {
+        NavigationLink(destination:
+            WorkoutSessionView(template: template, store: store) { newSession in
+                store.addSession(newSession)
+                // Generate new ID to force view recreation next time
+                navigationID = UUID()
+            }
+            .id(navigationID)
+        ) {
             ActionButton(
                 icon: "play.fill",
-                title: "Start Workout",
+                title: "Log Workout",
                 color: .green
             )
         }
-        .frame(maxWidth: .infinity)  // Add this to make it flex equally
+        .frame(maxWidth: .infinity)
     }
     
     private var cardBackground: some View {
@@ -86,7 +92,7 @@ struct ActionButton: View {
             Text(title)
         }
         .font(.subheadline)
-        .frame(maxWidth: .infinity)  // Make button fill available space
+        .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
         .padding(.horizontal, 16)
         .background(color.opacity(0.2))

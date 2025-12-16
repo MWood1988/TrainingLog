@@ -4,9 +4,11 @@ struct WorkoutSessionView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var session: WorkoutSession
     @FocusState private var focusedField: FocusedField?
-    @State private var showingNotesFor: UUID?  // NEW: Track which exercise notes to show
-    @ObservedObject var store: WorkoutStore  // NEW: Need store to access notes
+    @State private var showingNotesFor: UUID?
+    @State private var showingResetAlert = false
+    @ObservedObject var store: WorkoutStore
     
+    let template: WorkoutTemplate
     let onSave: (WorkoutSession) -> Void
     
     enum FocusedField: Hashable {
@@ -15,14 +17,20 @@ struct WorkoutSessionView: View {
     }
     
     init(template: WorkoutTemplate, store: WorkoutStore, existingSession: WorkoutSession? = nil, onSave: @escaping (WorkoutSession) -> Void) {
+        self.template = template
         self.store = store
         if let existing = existingSession {
             _session = State(initialValue: existing)
         } else {
-            let exercises = template.exercises.map { exTemplate in
-                Exercise(exerciseId: exTemplate.exerciseId, name: exTemplate.name, sets: [ExerciseSet(reps: 0, weight: 0)])
+            // Try to load draft for this template
+            if let draft = store.loadDraft(for: template.id) {
+                _session = State(initialValue: draft)
+            } else {
+                let exercises = template.exercises.map { exTemplate in
+                    Exercise(exerciseId: exTemplate.exerciseId, name: exTemplate.name, sets: [ExerciseSet(reps: 0, weight: 0)])
+                }
+                _session = State(initialValue: WorkoutSession(templateId: template.id, date: Date(), exercises: exercises))
             }
-            _session = State(initialValue: WorkoutSession(templateId: template.id, date: Date(), exercises: exercises))
         }
         self.onSave = onSave
     }
@@ -31,6 +39,9 @@ struct WorkoutSessionView: View {
         Form {
             Section {
                 DatePicker("Workout Date", selection: $session.date, displayedComponents: [.date, .hourAndMinute])
+                    .onChange(of: session.date) { _, _ in
+                        saveDraft()
+                    }
             }
             
             ForEach($session.exercises) { $exercise in
@@ -83,6 +94,7 @@ struct WorkoutSessionView: View {
                                     // This is the last set, add a new one
                                     let newSet = ExerciseSet(reps: 0, weight: 0)
                                     session.exercises[exerciseIndex].sets.append(newSet)
+                                    saveDraft()
                                     
                                     // Focus on the reps field of the new set
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -143,6 +155,19 @@ struct WorkoutSessionView: View {
             }
         }
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                Button(action: {
+                    showingResetAlert = true
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.counterclockwise")
+                        Text("Reset")
+                    }
+                    .font(.subheadline)
+                    .foregroundColor(.orange)
+                }
+            }
+            
             ToolbarItem(placement: .confirmationAction) {
                 saveButton
             }
@@ -150,6 +175,42 @@ struct WorkoutSessionView: View {
                 cancelButton
             }
         }
+        .alert("Reset Workout", isPresented: $showingResetAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Reset", role: .destructive) {
+                resetWorkout()
+            }
+        } message: {
+            Text("Are you sure you want to reset this workout? All entered data will be cleared.")
+        }
+        .onDisappear {
+            // Save draft when view disappears (navigating away)
+            saveDraft()
+        }
+        .onAppear {
+            // Reload draft when view appears (in case it was updated elsewhere or view was reused)
+            if let draft = store.loadDraft(for: session.templateId) {
+                session = draft
+            }
+        }
+    }
+    
+    private func saveDraft() {
+        store.saveDraft(session)
+    }
+    
+    private func resetWorkout() {
+        // Create fresh session with empty sets
+        let exercises = template.exercises.map { exTemplate in
+            Exercise(exerciseId: exTemplate.exerciseId, name: exTemplate.name, sets: [ExerciseSet(reps: 0, weight: 0)])
+        }
+        session = WorkoutSession(templateId: template.id, date: Date(), exercises: exercises)
+        
+        // Clear the draft
+        store.clearDraft(for: template.id)
+        
+        // Save the empty draft (so it appears empty if they navigate away and come back)
+        saveDraft()
     }
     
     private func exerciseSection(for exercise: Binding<Exercise>) -> some View {
@@ -161,7 +222,7 @@ struct WorkoutSessionView: View {
             header: HStack {
                 Text(exercise.wrappedValue.name)
                 Spacer()
-                // NEW: Info icon button
+                // Info icon button
                 Button(action: {
                     showingNotesFor = exercise.wrappedValue.exerciseId
                 }) {
@@ -179,7 +240,8 @@ struct WorkoutSessionView: View {
                 SetRowEditor(
                     set: exercise.sets[index],
                     exerciseId: exercise.wrappedValue.id,
-                    focusedField: $focusedField
+                    focusedField: $focusedField,
+                    onValueChange: saveDraft
                 )
             }
             addSetButton(for: exercise)
@@ -197,6 +259,7 @@ struct WorkoutSessionView: View {
                             isSelected: exercise.wrappedValue.form == form
                         ) {
                             exercise.wrappedValue.form = form
+                            saveDraft()
                         }
                     }
                 }
@@ -210,6 +273,7 @@ struct WorkoutSessionView: View {
             var updatedExercise = exercise.wrappedValue
             updatedExercise.sets.append(ExerciseSet(reps: 0, weight: 0))
             exercise.wrappedValue = updatedExercise
+            saveDraft()
         }
     }
     
@@ -247,7 +311,7 @@ struct WorkoutSessionView: View {
     }
     
     private var saveButton: some View {
-        Button("Save") {
+        Button("Finish") {
             // Filter out exercises that have no valid sets
             var cleanedSession = session
             cleanedSession.exercises = session.exercises.filter { exercise in
@@ -258,6 +322,8 @@ struct WorkoutSessionView: View {
             // Only save if there's at least one valid exercise
             if !cleanedSession.exercises.isEmpty {
                 onSave(cleanedSession)
+                // Clear the draft after finishing
+                store.clearDraft(for: session.templateId)
             }
             dismiss()
         }
@@ -274,6 +340,7 @@ struct SetRowEditor: View {
     @Binding var set: ExerciseSet
     let exerciseId: UUID
     @FocusState.Binding var focusedField: WorkoutSessionView.FocusedField?
+    let onValueChange: () -> Void
     
     var body: some View {
         HStack {
@@ -291,7 +358,10 @@ struct SetRowEditor: View {
     private var repsBinding: Binding<String> {
         Binding(
             get: { set.reps == 0 ? "" : String(set.reps) },
-            set: { set.reps = Int($0) ?? 0 }
+            set: { newValue in
+                set.reps = Int(newValue) ?? 0
+                onValueChange()
+            }
         )
     }
     
@@ -318,6 +388,7 @@ struct SetRowEditor: View {
                 } else {
                     set.weight = 0
                 }
+                onValueChange()
             }
         )
     }
@@ -352,7 +423,7 @@ struct FormButton: View {
     }
 }
 
-// NEW: Make UUID Identifiable for sheet presentation
+// Make UUID Identifiable for sheet presentation
 extension UUID: @retroactive Identifiable {
     public var id: UUID { self }
 }
