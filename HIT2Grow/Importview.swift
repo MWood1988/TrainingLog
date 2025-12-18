@@ -166,6 +166,7 @@ struct ImportView: View {
         let reps: Int
         let weight: Double
         let form: String
+        let notes: String
         
         // Normalize date to minute precision for consistent hashing
         var normalizedDate: Date {
@@ -187,6 +188,7 @@ struct ImportView: View {
             hasher.combine(reps)
             hasher.combine(normalizedWeight)
             hasher.combine(form)
+            // Note: We don't hash notes for duplicate detection - notes can be updated
         }
         
         static func == (lhs: CSVRow, rhs: CSVRow) -> Bool {
@@ -197,6 +199,7 @@ struct ImportView: View {
                    lhs.reps == rhs.reps &&
                    lhs.normalizedWeight == rhs.normalizedWeight &&
                    lhs.form == rhs.form
+            // Note: We don't compare notes for duplicate detection - notes can be updated
         }
     }
     
@@ -220,6 +223,7 @@ struct ImportView: View {
             }
             
             for exercise in session.exercises {
+                let notes = store.getExerciseNotes(exerciseId: exercise.exerciseId)
                 for (index, set) in exercise.sets.enumerated() {
                     let row = CSVRow(
                         date: session.date,
@@ -228,7 +232,8 @@ struct ImportView: View {
                         setNumber: index + 1,
                         reps: set.reps,
                         weight: set.weight,
-                        form: exercise.form.rawValue
+                        form: exercise.form.rawValue,
+                        notes: notes
                     )
                     existingRows.insert(row)
                 }
@@ -238,6 +243,9 @@ struct ImportView: View {
         // Parse CSV rows and check for duplicates
         var rowsToImport: [CSVRow] = []
         var rowsSkipped = 0
+        
+        // Track notes to update (exerciseName -> notes)
+        var notesToUpdate: [String: String] = [:]
         
         for line in lines.dropFirst() {
             guard !line.isEmpty else { continue }
@@ -253,6 +261,8 @@ struct ImportView: View {
             let reps = Int(columns[5]) ?? 0
             let weight = Double(columns[6]) ?? 0
             let form = columns[7]
+            // Notes column is optional (for backward compatibility with old exports)
+            let notes = columns.count > 8 ? columns[8] : ""
             
             // Combine date and time
             guard let date = dateFormatter.date(from: "\(dateString) \(timeString)") else {
@@ -266,8 +276,14 @@ struct ImportView: View {
                 setNumber: setNumber,
                 reps: reps,
                 weight: weight,
-                form: form
+                form: form,
+                notes: notes
             )
+            
+            // Track notes for this exercise (use the latest non-empty notes)
+            if !notes.isEmpty {
+                notesToUpdate[exerciseName] = notes
+            }
             
             // Check if this row already exists
             if existingRows.contains(csvRow) {
@@ -294,10 +310,9 @@ struct ImportView: View {
         }
         
         var sessionsAffected = 0
-        var templatesCreatedOrUpdated: Set<String> = []
         
         // Process each session group
-        for (sessionKey, rows) in sessionGroups {
+        for (_, rows) in sessionGroups {
             guard let firstRow = rows.first else { continue }
             
             let templateName = firstRow.templateName
@@ -309,7 +324,6 @@ struct ImportView: View {
                 // Create new template
                 template = WorkoutTemplate(name: templateName, exercises: [])
                 store.addTemplate(template!)
-                templatesCreatedOrUpdated.insert(templateName)
             }
             
             guard var finalTemplate = template else { continue }
@@ -330,6 +344,11 @@ struct ImportView: View {
                 
                 for (exerciseName, exerciseRows) in exerciseGroups {
                     let libraryItem = store.getOrCreateExercise(name: exerciseName)
+                    
+                    // Update notes if provided
+                    if let notes = notesToUpdate[exerciseName], !notes.isEmpty {
+                        store.updateExerciseNotes(exerciseId: libraryItem.id, notes: notes)
+                    }
                     
                     // Add exercise to template if not already there
                     if !finalTemplate.exercises.contains(where: { $0.exerciseId == libraryItem.id }) {
@@ -373,6 +392,11 @@ struct ImportView: View {
                 for (exerciseName, exerciseRows) in exerciseGroups {
                     let libraryItem = store.getOrCreateExercise(name: exerciseName)
                     
+                    // Update notes if provided
+                    if let notes = notesToUpdate[exerciseName], !notes.isEmpty {
+                        store.updateExerciseNotes(exerciseId: libraryItem.id, notes: notes)
+                    }
+                    
                     // Add exercise to template if not already there
                     if !finalTemplate.exercises.contains(where: { $0.exerciseId == libraryItem.id }) {
                         let exerciseTemplate = ExerciseTemplate(exerciseId: libraryItem.id, name: libraryItem.name)
@@ -403,6 +427,13 @@ struct ImportView: View {
                 
                 store.addSession(session)
                 sessionsAffected += 1
+            }
+        }
+        
+        // Also update notes for exercises that were skipped (in case notes changed)
+        for (exerciseName, notes) in notesToUpdate {
+            if let libraryItem = store.exerciseLibrary.first(where: { $0.name == exerciseName }) {
+                store.updateExerciseNotes(exerciseId: libraryItem.id, notes: notes)
             }
         }
         

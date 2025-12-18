@@ -181,7 +181,7 @@ struct ContentView: View {
     }
     
     private func generateCSV() -> String {
-        var csv = "Date,Time,Workout Template,Exercise,Set Number,Reps,Weight (kg),Form\n"
+        var csv = "Date,Time,Workout Template,Exercise,Set Number,Reps,Weight (kg),Form,Notes\n"
         
         // Sort sessions by date (most recent first)
         let sortedSessions = store.sessions.sorted { $0.date > $1.date }
@@ -199,15 +199,29 @@ struct ContentView: View {
             let time = dateFormatter.string(from: session.date)
             
             for exercise in session.exercises {
+                // Get notes for this exercise from the library
+                let notes = store.getExerciseNotes(exerciseId: exercise.exerciseId)
+                // Escape notes for CSV (wrap in quotes if contains comma, newline, or quotes)
+                let escapedNotes = escapeCSVField(notes)
+                
                 for (index, set) in exercise.sets.enumerated() {
                     let setNumber = index + 1
-                    let row = "\(date),\(time),\(templateName),\(exercise.name),\(setNumber),\(set.reps),\(set.weight),\(exercise.form.rawValue)\n"
+                    let row = "\(date),\(time),\(templateName),\(exercise.name),\(setNumber),\(set.reps),\(set.weight),\(exercise.form.rawValue),\(escapedNotes)\n"
                     csv += row
                 }
             }
         }
         
         return csv
+    }
+    
+    private func escapeCSVField(_ field: String) -> String {
+        // If field contains comma, newline, or quotes, wrap in quotes and escape internal quotes
+        if field.contains(",") || field.contains("\n") || field.contains("\"") {
+            let escaped = field.replacingOccurrences(of: "\"", with: "\"\"")
+            return "\"\(escaped)\""
+        }
+        return field
     }
 }
 

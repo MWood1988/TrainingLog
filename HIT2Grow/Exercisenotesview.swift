@@ -21,6 +21,10 @@ struct ExerciseNotesView: View {
                     .padding(8)
                     .background(Color(.systemGray6))
                     .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.white, lineWidth: 2)
+                    )
                     .padding(.horizontal)
                 
                 Text("Add notes about form, cues, or tips for this exercise")

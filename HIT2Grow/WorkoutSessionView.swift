@@ -10,6 +10,7 @@ struct WorkoutSessionView: View {
     
     let template: WorkoutTemplate
     let onSave: (WorkoutSession) -> Void
+    let isViewingExisting: Bool
     
     enum FocusedField: Hashable {
         case reps(exerciseId: UUID, setId: UUID)
@@ -19,6 +20,7 @@ struct WorkoutSessionView: View {
     init(template: WorkoutTemplate, store: WorkoutStore, existingSession: WorkoutSession? = nil, onSave: @escaping (WorkoutSession) -> Void) {
         self.template = template
         self.store = store
+        self.isViewingExisting = existingSession != nil
         if let existing = existingSession {
             _session = State(initialValue: existing)
         } else {
@@ -189,19 +191,24 @@ struct WorkoutSessionView: View {
             Text("Are you sure you want to reset this workout? All entered data will be cleared.")
         }
         .onDisappear {
-            // Save draft when view disappears (navigating away)
-            saveDraft()
+            // Save draft when view disappears (navigating away) - only for new sessions
+            if !isViewingExisting {
+                saveDraft()
+            }
         }
         .onAppear {
-            // Reload draft when view appears (in case it was updated elsewhere or view was reused)
-            if let draft = store.loadDraft(for: session.templateId) {
+            // Only reload draft for NEW sessions, not when viewing existing ones
+            if !isViewingExisting, let draft = store.loadDraft(for: session.templateId) {
                 session = draft
             }
         }
     }
     
     private func saveDraft() {
-        store.saveDraft(session)
+        // Only save drafts for new sessions, not when editing existing ones
+        if !isViewingExisting {
+            store.saveDraft(session)
+        }
     }
     
     private func resetWorkout() {
@@ -317,18 +324,28 @@ struct WorkoutSessionView: View {
     
     private var saveButton: some View {
         Button("Finish") {
-            // Filter out exercises that have no valid sets
+            // Filter out empty sets and exercises
             var cleanedSession = session
-            cleanedSession.exercises = session.exercises.filter { exercise in
-                // Keep exercise only if it has at least one set with reps > 0
-                exercise.sets.contains { $0.reps > 0 }
+            
+            // For each exercise, remove sets where both reps and weight are zero
+            cleanedSession.exercises = session.exercises.compactMap { exercise in
+                var cleanedExercise = exercise
+                cleanedExercise.sets = exercise.sets.filter { set in
+                    // Keep set only if it has reps > 0 OR weight > 0
+                    set.reps > 0 || set.weight > 0
+                }
+                
+                // Only keep exercise if it has at least one valid set
+                return cleanedExercise.sets.isEmpty ? nil : cleanedExercise
             }
             
             // Only save if there's at least one valid exercise
             if !cleanedSession.exercises.isEmpty {
                 onSave(cleanedSession)
-                // Clear the draft after finishing
-                store.clearDraft(for: session.templateId)
+                // Clear the draft after finishing (only for new sessions)
+                if !isViewingExisting {
+                    store.clearDraft(for: session.templateId)
+                }
             }
             dismiss()
         }
