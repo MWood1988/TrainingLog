@@ -6,11 +6,15 @@ struct WorkoutSessionView: View {
     @FocusState private var focusedField: FocusedField?
     @State private var showingNotesFor: UUID?
     @State private var showingResetAlert = false
+    @State private var lastViewedExerciseId: UUID?
     @ObservedObject var store: WorkoutStore
     
     let template: WorkoutTemplate
     let onSave: (WorkoutSession) -> Void
     let isViewingExisting: Bool
+    
+    // Static storage for scroll position per template (persists across view recreation)
+    private static var savedScrollPositions: [UUID: UUID] = [:]
     
     enum FocusedField: Hashable {
         case reps(exerciseId: UUID, setId: UUID)
@@ -37,23 +41,71 @@ struct WorkoutSessionView: View {
         self.onSave = onSave
     }
     
-    var body: some View {
-        Form {
-            Section {
-                DatePicker("Workout Date", selection: $session.date, displayedComponents: [.date, .hourAndMinute])
-                    .onChange(of: session.date) { _, _ in
-                        saveDraft()
-                    }
-            }
-            
-            ForEach($session.exercises) { $exercise in
-                exerciseSection(for: $exercise)
-            }
+    // Get the previous session data for a specific exercise
+    private func previousSessionData(for exerciseId: UUID) -> Exercise? {
+        // Get all sessions for this exercise, sorted by date (newest first)
+        let exerciseSessions = store.sessions(for: exerciseId)
+        
+        // If we're viewing an existing session, find the one before it
+        // Otherwise, just get the most recent one
+        if isViewingExisting {
+            // Find sessions before the current session date
+            let previousSessions = exerciseSessions.filter { $0.0.date < session.date }
+            return previousSessions.first?.1
+        } else {
+            // For new sessions, just get the most recent
+            return exerciseSessions.first?.1
         }
-        .contentShape(Rectangle()) // Make entire background tappable
-        .onTapGesture {
-            // Dismiss keyboard when tapping outside text fields
-            focusedField = nil
+    }
+    
+    var body: some View {
+        ScrollViewReader { scrollProxy in
+            Form {
+                Section {
+                    DatePicker("Workout Date", selection: $session.date, displayedComponents: [.date, .hourAndMinute])
+                        .onChange(of: session.date) { _, _ in
+                            saveDraft()
+                        }
+                }
+                
+                ForEach($session.exercises) { $exercise in
+                    exerciseSection(for: $exercise)
+                        .id(exercise.id)
+                }
+            }
+            .contentShape(Rectangle()) // Make entire background tappable
+            .onTapGesture {
+                // Dismiss keyboard when tapping outside text fields
+                focusedField = nil
+            }
+            .onAppear {
+                // Restore scroll position when view appears
+                if let savedPosition = Self.savedScrollPositions[template.id] {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            scrollProxy.scrollTo(savedPosition, anchor: .top)
+                        }
+                    }
+                }
+            }
+            .onDisappear {
+                // Save the last viewed exercise position
+                if let lastId = lastViewedExerciseId {
+                    Self.savedScrollPositions[template.id] = lastId
+                }
+            }
+            .onChange(of: focusedField) { _, newValue in
+                // Track which exercise is currently being edited
+                if let focused = newValue {
+                    switch focused {
+                    case .reps(let exerciseId, _), .weight(let exerciseId, _):
+                        // Find the exercise's id (not exerciseId from library)
+                        if let exercise = session.exercises.first(where: { $0.id == exerciseId }) {
+                            lastViewedExerciseId = exercise.id
+                        }
+                    }
+                }
+            }
         }
         .overlay(alignment: .trailing) {
             if let focused = focusedField {
@@ -229,6 +281,7 @@ struct WorkoutSessionView: View {
         let hasValidSets = exercise.wrappedValue.sets.contains { $0.reps > 0 }
         let exerciseNotes = store.getExerciseNotes(exerciseId: exercise.wrappedValue.exerciseId)
         let hasNotes = !exerciseNotes.isEmpty
+        let previousData = previousSessionData(for: exercise.wrappedValue.exerciseId)
         
         return Section(
             header: HStack {
@@ -244,9 +297,18 @@ struct WorkoutSessionView: View {
                 }
                 .buttonStyle(.plain)
             },
-            footer: hasValidSets ? nil : Text("This exercise will not be saved (no reps recorded)")
-                .font(.caption)
-                .foregroundColor(.orange)
+            footer: VStack(alignment: .leading, spacing: 8) {
+                if !hasValidSets {
+                    Text("This exercise will not be saved (no reps recorded)")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
+                
+                // Previous workout data
+                if let previous = previousData {
+                    PreviousWorkoutDataView(exercise: previous)
+                }
+            }
         ) {
             ForEach(Array(exercise.wrappedValue.sets.enumerated()), id: \.element.id) { index, set in
                 SetRowEditor(
@@ -277,6 +339,10 @@ struct WorkoutSessionView: View {
                 }
             }
             .padding(.top, 8)
+        }
+        .onAppear {
+            // Track which exercise section is visible
+            lastViewedExerciseId = exercise.wrappedValue.id
         }
     }
     
@@ -355,6 +421,41 @@ struct WorkoutSessionView: View {
         Button("Cancel") {
             dismiss()
         }
+    }
+}
+
+// MARK: - Previous Workout Data View
+struct PreviousWorkoutDataView: View {
+    let exercise: Exercise
+    
+    private var formattedSets: String {
+        exercise.sets.map { "\($0.reps) × \(formatWeight($0.weight))" }.joined(separator: "  •  ")
+    }
+    
+    private func formatWeight(_ weight: Double) -> String {
+        if weight.truncatingRemainder(dividingBy: 1) == 0 {
+            return "\(Int(weight)) kg"
+        } else {
+            return String(format: "%.1f kg", weight)
+        }
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.caption2)
+                Text("Last workout:")
+                    .font(.caption)
+                    .fontWeight(.medium)
+            }
+            .foregroundColor(.secondary)
+            
+            Text(formattedSets)
+                .font(.caption)
+                .foregroundColor(.blue)
+        }
+        .padding(.top, 4)
     }
 }
 
