@@ -1,6 +1,17 @@
 import SwiftUI
 import Combine
 
+// Draft wrapper with timestamp to detect stale drafts
+struct DraftSession: Codable {
+    let session: WorkoutSession
+    let savedAt: Date
+    
+    init(session: WorkoutSession, savedAt: Date = Date()) {
+        self.session = session
+        self.savedAt = savedAt
+    }
+}
+
 class WorkoutStore: ObservableObject {
     @Published var templates: [WorkoutTemplate] = []
     @Published var sessions: [WorkoutSession] = []
@@ -9,19 +20,21 @@ class WorkoutStore: ObservableObject {
     private let templatesKey = "templates"
     private let sessionsKey = "sessions"
     private let exerciseLibraryKey = "exerciseLibrary"
-    private let draftSessionsKey = "draftSessions"
+    private let draftSessionsKey = "draftSessionsV2" // Changed key to avoid conflicts with old format
     
     init() {
         loadExerciseLibrary()
         loadTemplates()
         loadSessions()
+        cleanupStaleDrafts() // Clean up old drafts on app launch
     }
     
     // MARK: - Draft Session Management
     
     func saveDraft(_ session: WorkoutSession) {
         var drafts = loadAllDrafts()
-        drafts[session.templateId] = session
+        let draft = DraftSession(session: session, savedAt: Date())
+        drafts[session.templateId] = draft
         
         guard let encoded = try? JSONEncoder().encode(drafts) else { return }
         UserDefaults.standard.set(encoded, forKey: draftSessionsKey)
@@ -29,7 +42,32 @@ class WorkoutStore: ObservableObject {
     
     func loadDraft(for templateId: UUID) -> WorkoutSession? {
         let drafts = loadAllDrafts()
-        return drafts[templateId]
+        guard let draft = drafts[templateId] else { return nil }
+        
+        // Check if the draft is stale (older than the most recent saved session for this template)
+        let mostRecentSession = sessions
+            .filter { $0.templateId == templateId }
+            .sorted { $0.date > $1.date }
+            .first
+        
+        if let recentSession = mostRecentSession {
+            // If the draft was saved BEFORE the most recent session was created,
+            // the draft is stale and should be discarded
+            if draft.savedAt < recentSession.date {
+                // Clear the stale draft
+                clearDraft(for: templateId)
+                return nil
+            }
+        }
+        
+        // Also discard drafts older than 24 hours as a safety measure
+        let twentyFourHoursAgo = Date().addingTimeInterval(-24 * 60 * 60)
+        if draft.savedAt < twentyFourHoursAgo {
+            clearDraft(for: templateId)
+            return nil
+        }
+        
+        return draft.session
     }
     
     func clearDraft(for templateId: UUID) {
@@ -40,12 +78,48 @@ class WorkoutStore: ObservableObject {
         UserDefaults.standard.set(encoded, forKey: draftSessionsKey)
     }
     
-    private func loadAllDrafts() -> [UUID: WorkoutSession] {
+    private func loadAllDrafts() -> [UUID: DraftSession] {
         guard let data = UserDefaults.standard.data(forKey: draftSessionsKey),
-              let decoded = try? JSONDecoder().decode([UUID: WorkoutSession].self, from: data) else {
+              let decoded = try? JSONDecoder().decode([UUID: DraftSession].self, from: data) else {
             return [:]
         }
         return decoded
+    }
+    
+    // Clean up drafts that are older than 24 hours or have corresponding saved sessions
+    private func cleanupStaleDrafts() {
+        var drafts = loadAllDrafts()
+        var changed = false
+        let twentyFourHoursAgo = Date().addingTimeInterval(-24 * 60 * 60)
+        
+        for (templateId, draft) in drafts {
+            var shouldRemove = false
+            
+            // Remove drafts older than 24 hours
+            if draft.savedAt < twentyFourHoursAgo {
+                shouldRemove = true
+            }
+            
+            // Remove drafts that are older than the most recent saved session
+            let mostRecentSession = sessions
+                .filter { $0.templateId == templateId }
+                .sorted { $0.date > $1.date }
+                .first
+            
+            if let recentSession = mostRecentSession, draft.savedAt < recentSession.date {
+                shouldRemove = true
+            }
+            
+            if shouldRemove {
+                drafts.removeValue(forKey: templateId)
+                changed = true
+            }
+        }
+        
+        if changed {
+            guard let encoded = try? JSONEncoder().encode(drafts) else { return }
+            UserDefaults.standard.set(encoded, forKey: draftSessionsKey)
+        }
     }
     
     // MARK: - Exercise Library
@@ -146,6 +220,9 @@ class WorkoutStore: ObservableObject {
     func addSession(_ session: WorkoutSession) {
         sessions.append(session)
         saveSessions()
+        
+        // Always clear draft after successfully saving a session
+        clearDraft(for: session.templateId)
     }
     
     func updateSession(_ session: WorkoutSession) {

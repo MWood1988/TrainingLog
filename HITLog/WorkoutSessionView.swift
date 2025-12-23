@@ -3,18 +3,19 @@ import SwiftUI
 struct WorkoutSessionView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var session: WorkoutSession
+    @State private var hasLoadedDraft: Bool = false // Track if we've already loaded the draft this session
     @FocusState private var focusedField: FocusedField?
     @State private var showingNotesFor: UUID?
     @State private var showingResetAlert = false
-    @State private var lastViewedExerciseId: UUID?
+    @State private var lastFocusedField: FocusedField? // Track last focused field for restoration
     @ObservedObject var store: WorkoutStore
     
     let template: WorkoutTemplate
     let onSave: (WorkoutSession) -> Void
     let isViewingExisting: Bool
     
-    // Static storage for scroll position per template (persists across view recreation)
-    private static var savedScrollPositions: [UUID: UUID] = [:]
+    // Static storage for last focused field per template (persists across view recreation)
+    private static var savedFocusedFields: [UUID: FocusedField] = [:]
     
     enum FocusedField: Hashable {
         case reps(exerciseId: UUID, setId: UUID)
@@ -27,16 +28,14 @@ struct WorkoutSessionView: View {
         self.isViewingExisting = existingSession != nil
         if let existing = existingSession {
             _session = State(initialValue: existing)
+            _hasLoadedDraft = State(initialValue: true) // Don't load drafts for existing sessions
         } else {
-            // Try to load draft for this template
-            if let draft = store.loadDraft(for: template.id) {
-                _session = State(initialValue: draft)
-            } else {
-                let exercises = template.exercises.map { exTemplate in
-                    Exercise(exerciseId: exTemplate.exerciseId, name: exTemplate.name, sets: [ExerciseSet(reps: 0, weight: 0)])
-                }
-                _session = State(initialValue: WorkoutSession(templateId: template.id, date: Date(), exercises: exercises))
+            // Start with empty session - draft will be loaded in onAppear
+            let exercises = template.exercises.map { exTemplate in
+                Exercise(exerciseId: exTemplate.exerciseId, name: exTemplate.name, sets: [ExerciseSet(reps: 0, weight: 0)])
             }
+            _session = State(initialValue: WorkoutSession(templateId: template.id, date: Date(), exercises: exercises))
+            _hasLoadedDraft = State(initialValue: false) // Will load draft in onAppear
         }
         self.onSave = onSave
     }
@@ -79,31 +78,37 @@ struct WorkoutSessionView: View {
                 focusedField = nil
             }
             .onAppear {
-                // Restore scroll position when view appears
-                if let savedPosition = Self.savedScrollPositions[template.id] {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            scrollProxy.scrollTo(savedPosition, anchor: .top)
+                // Restore focus to the last field the user was editing
+                if let savedFocus = Self.savedFocusedFields[template.id] {
+                    // First scroll to the exercise, then restore focus
+                    switch savedFocus {
+                    case .reps(let exerciseId, _), .weight(let exerciseId, _):
+                        // Scroll to the exercise section first
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            withAnimation {
+                                scrollProxy.scrollTo(exerciseId, anchor: .center)
+                            }
+                        }
+                        // Then restore focus after scroll completes
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                            focusedField = savedFocus
                         }
                     }
                 }
             }
             .onDisappear {
-                // Save the last viewed exercise position
-                if let lastId = lastViewedExerciseId {
-                    Self.savedScrollPositions[template.id] = lastId
+                // Save the currently focused field
+                if let currentFocus = focusedField {
+                    Self.savedFocusedFields[template.id] = currentFocus
+                } else if let lastFocus = lastFocusedField {
+                    // If no current focus, use the last known focus
+                    Self.savedFocusedFields[template.id] = lastFocus
                 }
             }
             .onChange(of: focusedField) { _, newValue in
-                // Track which exercise is currently being edited
-                if let focused = newValue {
-                    switch focused {
-                    case .reps(let exerciseId, _), .weight(let exerciseId, _):
-                        // Find the exercise's id (not exerciseId from library)
-                        if let exercise = session.exercises.first(where: { $0.id == exerciseId }) {
-                            lastViewedExerciseId = exercise.id
-                        }
-                    }
+                // Track the last focused field even when focus is lost
+                if let newFocus = newValue {
+                    lastFocusedField = newFocus
                 }
             }
         }
@@ -249,9 +254,12 @@ struct WorkoutSessionView: View {
             }
         }
         .onAppear {
-            // Only reload draft for NEW sessions, not when viewing existing ones
-            if !isViewingExisting, let draft = store.loadDraft(for: session.templateId) {
-                session = draft
+            // Load draft only once when view first appears (not on subsequent appears)
+            if !isViewingExisting && !hasLoadedDraft {
+                hasLoadedDraft = true
+                if let draft = store.loadDraft(for: template.id) {
+                    session = draft
+                }
             }
         }
     }
@@ -340,10 +348,6 @@ struct WorkoutSessionView: View {
             }
             .padding(.top, 8)
         }
-        .onAppear {
-            // Track which exercise section is visible
-            lastViewedExerciseId = exercise.wrappedValue.id
-        }
     }
     
     private func addSetButton(for exercise: Binding<Exercise>) -> some View {
@@ -408,10 +412,7 @@ struct WorkoutSessionView: View {
             // Only save if there's at least one valid exercise
             if !cleanedSession.exercises.isEmpty {
                 onSave(cleanedSession)
-                // Clear the draft after finishing (only for new sessions)
-                if !isViewingExisting {
-                    store.clearDraft(for: session.templateId)
-                }
+                // Note: clearDraft is now called inside addSession in WorkoutStore
             }
             dismiss()
         }
