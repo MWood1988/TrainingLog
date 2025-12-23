@@ -181,7 +181,8 @@ struct ContentView: View {
     }
     
     private func generateCSV() -> String {
-        var csv = "Date,Time,Workout Template,Exercise,Set Number,Reps,Weight (kg),Form,Notes\n"
+        // UPDATED: Added "Exercise Order" column to preserve exercise sequence
+        var csv = "Date,Time,Workout Template,Exercise,Exercise Order,Set Number,Reps,Weight (kg),Form,Notes\n"
         
         // Sort sessions by date (most recent first)
         let sortedSessions = store.sessions.sorted { $0.date > $1.date }
@@ -198,7 +199,10 @@ struct ContentView: View {
             dateFormatter.dateFormat = "HH:mm"
             let time = dateFormatter.string(from: session.date)
             
-            for exercise in session.exercises {
+            // UPDATED: Track exercise order (1-based index)
+            for (exerciseIndex, exercise) in session.exercises.enumerated() {
+                let exerciseOrder = exerciseIndex + 1
+                
                 // Get notes for this exercise from the library
                 let notes = store.getExerciseNotes(exerciseId: exercise.exerciseId)
                 // Escape notes for CSV (wrap in quotes if contains comma, newline, or quotes)
@@ -206,7 +210,8 @@ struct ContentView: View {
                 
                 for (index, set) in exercise.sets.enumerated() {
                     let setNumber = index + 1
-                    let row = "\(date),\(time),\(templateName),\(exercise.name),\(setNumber),\(set.reps),\(set.weight),\(exercise.form.rawValue),\(escapedNotes)\n"
+                    // UPDATED: Include exerciseOrder in the CSV row
+                    let row = "\(date),\(time),\(escapeCSVField(templateName)),\(escapeCSVField(exercise.name)),\(exerciseOrder),\(setNumber),\(set.reps),\(set.weight),\(exercise.form.rawValue),\(escapedNotes)\n"
                     csv += row
                 }
             }

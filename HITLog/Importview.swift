@@ -28,7 +28,7 @@ struct ImportView: View {
                     .font(.title2)
                     .fontWeight(.bold)
                 
-                Text("Select a CSV file exported from HIT2Grow. Only new unique rows will be added.")
+                Text("Select a CSV file exported from HITLog. Only new unique rows will be added.")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -162,6 +162,7 @@ struct ImportView: View {
         let date: Date
         let templateName: String
         let exerciseName: String
+        let exerciseOrder: Int  // NEW: Track exercise order
         let setNumber: Int
         let reps: Int
         let weight: Double
@@ -188,7 +189,7 @@ struct ImportView: View {
             hasher.combine(reps)
             hasher.combine(normalizedWeight)
             hasher.combine(form)
-            // Note: We don't hash notes for duplicate detection - notes can be updated
+            // Note: We don't hash notes or exerciseOrder for duplicate detection
         }
         
         static func == (lhs: CSVRow, rhs: CSVRow) -> Bool {
@@ -199,7 +200,7 @@ struct ImportView: View {
                    lhs.reps == rhs.reps &&
                    lhs.normalizedWeight == rhs.normalizedWeight &&
                    lhs.form == rhs.form
-            // Note: We don't compare notes for duplicate detection - notes can be updated
+            // Note: We don't compare notes or exerciseOrder for duplicate detection
         }
     }
     
@@ -210,6 +211,10 @@ struct ImportView: View {
         guard lines.count > 1 else {
             return ImportStats(rowsImported: 0, rowsSkipped: 0, sessionsAffected: 0)
         }
+        
+        // Detect CSV format by checking header
+        let header = lines.first ?? ""
+        let hasExerciseOrder = header.lowercased().contains("exercise order")
         
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd HH:mm"
@@ -222,13 +227,14 @@ struct ImportView: View {
                 continue
             }
             
-            for exercise in session.exercises {
+            for (exerciseIndex, exercise) in session.exercises.enumerated() {
                 let notes = store.getExerciseNotes(exerciseId: exercise.exerciseId)
                 for (index, set) in exercise.sets.enumerated() {
                     let row = CSVRow(
                         date: session.date,
                         templateName: template.name,
                         exerciseName: exercise.name,
+                        exerciseOrder: exerciseIndex + 1,
                         setNumber: index + 1,
                         reps: set.reps,
                         weight: set.weight,
@@ -251,18 +257,47 @@ struct ImportView: View {
             guard !line.isEmpty else { continue }
             
             let columns = parseCSVLine(line)
-            guard columns.count >= 8 else { continue }
             
-            let dateString = columns[0]
-            let timeString = columns[1]
-            let templateName = columns[2]
-            let exerciseName = columns[3]
-            let setNumber = Int(columns[4]) ?? 0
-            let reps = Int(columns[5]) ?? 0
-            let weight = Double(columns[6]) ?? 0
-            let form = columns[7]
-            // Notes column is optional (for backward compatibility with old exports)
-            let notes = columns.count > 8 ? columns[8] : ""
+            // Handle both old format (without Exercise Order) and new format (with Exercise Order)
+            let minColumns = hasExerciseOrder ? 9 : 8
+            guard columns.count >= minColumns else { continue }
+            
+            let dateString: String
+            let timeString: String
+            let templateName: String
+            let exerciseName: String
+            let exerciseOrder: Int
+            let setNumber: Int
+            let reps: Int
+            let weight: Double
+            let form: String
+            let notes: String
+            
+            if hasExerciseOrder {
+                // New format: Date,Time,Workout Template,Exercise,Exercise Order,Set Number,Reps,Weight (kg),Form,Notes
+                dateString = columns[0]
+                timeString = columns[1]
+                templateName = columns[2]
+                exerciseName = columns[3]
+                exerciseOrder = Int(columns[4]) ?? 1
+                setNumber = Int(columns[5]) ?? 0
+                reps = Int(columns[6]) ?? 0
+                weight = Double(columns[7]) ?? 0
+                form = columns[8]
+                notes = columns.count > 9 ? columns[9] : ""
+            } else {
+                // Old format: Date,Time,Workout Template,Exercise,Set Number,Reps,Weight (kg),Form,Notes
+                dateString = columns[0]
+                timeString = columns[1]
+                templateName = columns[2]
+                exerciseName = columns[3]
+                exerciseOrder = 0  // Will be determined by order of appearance
+                setNumber = Int(columns[4]) ?? 0
+                reps = Int(columns[5]) ?? 0
+                weight = Double(columns[6]) ?? 0
+                form = columns[7]
+                notes = columns.count > 8 ? columns[8] : ""
+            }
             
             // Combine date and time
             guard let date = dateFormatter.date(from: "\(dateString) \(timeString)") else {
@@ -273,6 +308,7 @@ struct ImportView: View {
                 date: date,
                 templateName: templateName,
                 exerciseName: exerciseName,
+                exerciseOrder: exerciseOrder,
                 setNumber: setNumber,
                 reps: reps,
                 weight: weight,
@@ -339,10 +375,23 @@ struct ImportView: View {
                 // Add rows to existing session
                 var updatedSession = existingSession
                 
-                // Group new rows by exercise
+                // Group new rows by exercise, preserving order
                 let exerciseGroups = Dictionary(grouping: rows, by: { $0.exerciseName })
                 
-                for (exerciseName, exerciseRows) in exerciseGroups {
+                // UPDATED: Sort exercises by their order value
+                let sortedExerciseNames = exerciseGroups.keys.sorted { name1, name2 in
+                    let order1 = exerciseGroups[name1]?.first?.exerciseOrder ?? Int.max
+                    let order2 = exerciseGroups[name2]?.first?.exerciseOrder ?? Int.max
+                    // If both have order 0 (old format), maintain original order
+                    if order1 == 0 && order2 == 0 {
+                        return false // Keep original order
+                    }
+                    return order1 < order2
+                }
+                
+                for exerciseName in sortedExerciseNames {
+                    guard let exerciseRows = exerciseGroups[exerciseName] else { continue }
+                    
                     let libraryItem = store.getOrCreateExercise(name: exerciseName)
                     
                     // Update notes if provided
@@ -389,7 +438,23 @@ struct ImportView: View {
                 let exerciseGroups = Dictionary(grouping: rows, by: { $0.exerciseName })
                 var sessionExercises: [Exercise] = []
                 
-                for (exerciseName, exerciseRows) in exerciseGroups {
+                // UPDATED: Sort exercises by their order value to preserve sequence
+                let sortedExerciseNames = exerciseGroups.keys.sorted { name1, name2 in
+                    let order1 = exerciseGroups[name1]?.first?.exerciseOrder ?? Int.max
+                    let order2 = exerciseGroups[name2]?.first?.exerciseOrder ?? Int.max
+                    // If both have order 0 (old format), maintain original order from CSV
+                    if order1 == 0 && order2 == 0 {
+                        // Find first occurrence index in rows array
+                        let index1 = rows.firstIndex(where: { $0.exerciseName == name1 }) ?? 0
+                        let index2 = rows.firstIndex(where: { $0.exerciseName == name2 }) ?? 0
+                        return index1 < index2
+                    }
+                    return order1 < order2
+                }
+                
+                for exerciseName in sortedExerciseNames {
+                    guard let exerciseRows = exerciseGroups[exerciseName] else { continue }
+                    
                     let libraryItem = store.getOrCreateExercise(name: exerciseName)
                     
                     // Update notes if provided
